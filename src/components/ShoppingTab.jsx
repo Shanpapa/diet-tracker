@@ -17,35 +17,51 @@ const TEMPLATE = [
   { name:'Cukkini', quantity:'2 db', category:'Zöldségek' },
   { name:'Uborka', quantity:'3 db', category:'Zöldségek' },
   { name:'Banán', quantity:'8 db', category:'Gyümölcsök' },
-  { name:'Áfonya / bogyós mix', quantity:'500 g (fagyasztott is jó)', category:'Gyümölcsök' },
+  { name:'Áfonya / bogyós mix', quantity:'500 g', category:'Gyümölcsök' },
   { name:'Kivi', quantity:'7 db', category:'Gyümölcsök' },
   { name:'Avokádó', quantity:'3-4 db', category:'Gyümölcsök' },
   { name:'Görög joghurt (természetes)', quantity:'1 kg', category:'Tejtermék & magvak' },
-  { name:'Chia mag', quantity:'200 g (ha nincs)', category:'Tejtermék & magvak' },
+  { name:'Chia mag', quantity:'200 g', category:'Tejtermék & magvak' },
   { name:'Dió', quantity:'150 g', category:'Tejtermék & magvak' },
   { name:'Mandula', quantity:'150 g', category:'Tejtermék & magvak' },
-  { name:'Kimchi', quantity:'1 üveg (ha nincs)', category:'Kamra' },
+  { name:'Kimchi', quantity:'1 üveg', category:'Kamra' },
   { name:'Ramen alap', quantity:'5 csomag', category:'Kamra' },
   { name:'Rizs', quantity:'1 kg', category:'Kamra' },
   { name:'Tészta', quantity:'500 g', category:'Kamra' },
-  { name:'Savanyúság', quantity:'1 üveg (ha nincs)', category:'Kamra' },
+  { name:'Savanyúság', quantity:'1 üveg', category:'Kamra' },
 ]
 
 const CATS = ['Fehérjék','Zöldségek','Gyümölcsök','Tejtermék & magvak','Kamra','Egyéb']
+
+const SKIP = ['maradék húsleves','csirkemell (holnapra)','leves alaplé','batch főzés','citromlé, só','ketchup + mustár','saláta, paradicsom, uborka','salátalevél, uborka','pörkölt szósz (hagyma, paprika, paradicsom)','pörkölt szósz']
+
+function normalizeKey(name) {
+  return name.toLowerCase()
+    .replace('scrambled','').replace('(sütve)','').replace('(főtt)','')
+    .replace('főtt ','').replace('sült ','').replace(' grill','')
+    .replace('(vadász)','').replace(/\s+/g,' ').trim()
+}
+
+function getCategory(name) {
+  const n = name.toLowerCase()
+  if (n.includes('tojás')||n.includes('bacon')||n.includes('salmon')||n.includes('gyoza')||n.includes('csirke')||n.includes('darált')||n.includes('tonhal')||n.includes('kolbász')||n.includes('sonka')||n.includes('marhahús')) return 'Fehérjék'
+  if (n.includes('joghurt')||n.includes('chia')||n.includes('dió')||n.includes('mandula')||n.includes('mogyoró')||n.includes('tej')||n.includes('sajt')||n.includes('tejföl')||n.includes('mozzarella')) return 'Tejtermék & magvak'
+  if (n.includes('banán')||n.includes('alma')||n.includes('kivi')||n.includes('áfonya')||n.includes('avokádó')) return 'Gyümölcsök'
+  if (n.includes('paradicsom')||n.includes('gomba')||n.includes('cukkini')||n.includes('paprika')||n.includes('uborka')||n.includes('saláta')||n.includes('répa')||n.includes('káposzta')||n.includes('krumpli')||n.includes('burgonya')) return 'Zöldségek'
+  return 'Kamra'
+}
 
 export default function ShoppingTab() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [newItem, setNewItem] = useState('')
-  const [resetting, setResetting] = useState(false)
-  const [adding, setAdding] = useState(false)
+  const [working, setWorking] = useState(false)
   const [err, setErr] = useState('')
 
   useEffect(() => { loadItems() }, [])
 
   async function loadItems() {
-    const { data, error } = await supabase
-      .from('shopping_items').select('*').order('category').order('created_at')
+    const { data, error } = await supabase.from('shopping_items').select('*').order('category').order('created_at')
     if (error) setErr(error.message)
     else setItems(data || [])
     setLoading(false)
@@ -56,30 +72,58 @@ export default function ShoppingTab() {
     await loadItems()
   }
 
-  async function resetList() {
-    setResetting(true)
+  async function resetTemplate() {
+    setWorking(true)
     setErr('')
-    const { error: delErr } = await supabase.from('shopping_items')
-      .delete().neq('id', '00000000-0000-0000-0000-000000000000')
-    if (delErr) { setErr(delErr.message); setResetting(false); return }
-    const { error: insErr } = await supabase.from('shopping_items')
-      .insert(TEMPLATE.map(t => ({ ...t, checked:false })))
-    if (insErr) setErr(insErr.message)
+    await supabase.from('shopping_items').delete().neq('id','00000000-0000-0000-0000-000000000000')
+    await supabase.from('shopping_items').insert(TEMPLATE.map(t => ({ ...t, checked:false })))
     await loadItems()
-    setResetting(false)
+    setWorking(false)
+  }
+
+  async function generateFromPlan() {
+    setWorking(true)
+    setErr('')
+    const { data } = await supabase.from('meal_plans').select('*')
+      .order('week_start', { ascending:false }).limit(1).maybeSingle()
+    if (!data?.plan_data) { setErr('Nincs importált heti terv.'); setWorking(false); return }
+
+    const plan = data.plan_data
+    const seen = new Set()
+    const toInsert = []
+
+    plan.days.forEach(day => {
+      day.meals.forEach(meal => {
+        ;['levi','edit'].forEach(who => {
+          meal[who]?.items?.forEach(item => {
+            const key = normalizeKey(item.name)
+            if (!key || SKIP.includes(key) || seen.has(key)) return
+            seen.add(key)
+            toInsert.push({
+              name: item.name,
+              quantity: item.amount,
+              category: getCategory(item.name),
+              checked: false
+            })
+          })
+        })
+      })
+    })
+
+    await supabase.from('shopping_items').delete().neq('id','00000000-0000-0000-0000-000000000000')
+    if (toInsert.length > 0) await supabase.from('shopping_items').insert(toInsert)
+    await loadItems()
+    setWorking(false)
   }
 
   async function addItem(e) {
     e.preventDefault()
     if (!newItem.trim()) return
-    setAdding(true)
     setErr('')
-    const { error } = await supabase.from('shopping_items')
-      .insert({ name:newItem.trim(), category:'Egyéb', checked:false })
+    const { error } = await supabase.from('shopping_items').insert({ name:newItem.trim(), category:'Egyéb', checked:false })
     if (error) setErr(error.message)
     else setNewItem('')
     await loadItems()
-    setAdding(false)
   }
 
   const done = items.filter(i => i.checked).length
@@ -88,10 +132,16 @@ export default function ShoppingTab() {
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
         <span style={{ fontSize:14, color:'#a0a0a0', fontWeight:500 }}>{done} / {items.length} kész</span>
-        <button onClick={resetList} disabled={resetting} style={s.resetBtn}>
-          {resetting ? '...' : '↺ Heti lista reset'}
+      </div>
+
+      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+        <button onClick={generateFromPlan} disabled={working} style={s.greenBtn}>
+          {working ? '...' : '✦ Generálás tervből'}
+        </button>
+        <button onClick={resetTemplate} disabled={working} style={s.grayBtn}>
+          ↺ Alap lista
         </button>
       </div>
 
@@ -100,13 +150,11 @@ export default function ShoppingTab() {
       <form onSubmit={addItem} style={{ display:'flex', gap:8, marginBottom:20 }}>
         <input value={newItem} onChange={e => setNewItem(e.target.value)}
           placeholder="Extra tétel..." style={s.input} />
-        <button type="submit" disabled={adding} style={s.addBtn}>{adding ? '…' : '+'}</button>
+        <button type="submit" style={s.addBtn}>+</button>
       </form>
 
       {items.length === 0 && (
-        <div style={s.empty}>
-          A lista üres — nyomd meg a <strong>↺ Heti lista reset</strong> gombot a heti bevásárlólista betöltéséhez.
-        </div>
+        <div style={s.empty}>Nyomd meg a <strong>✦ Generálás tervből</strong> gombot a heti tervből való automatikus lista generáláshoz.</div>
       )}
 
       {CATS.map(cat => {
@@ -132,7 +180,8 @@ export default function ShoppingTab() {
 }
 
 const s = {
-  resetBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#606060', padding:'8px 14px', fontSize:13 },
+  greenBtn: { flex:1, background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:'12px 0', fontSize:13, fontWeight:600 },
+  grayBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#606060', padding:'12px 14px', fontSize:13 },
   input: { flex:1, background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, padding:'12px 14px', color:'#e8e8e8', fontSize:14, outline:'none' },
   addBtn: { background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, color:'#22c55e', width:46, fontSize:22, fontWeight:300 },
   section: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, overflow:'hidden', marginBottom:12 },
