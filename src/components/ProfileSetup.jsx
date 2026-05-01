@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 
 const PROFILES = {
-  shandu: { display_name:'Shandu', calorie_target:2200, goal_weight_kg:100, desc:'186 cm · 147 kg → 100 kg' },
+  shandu: { display_name:'Levi', calorie_target:2200, goal_weight_kg:100, desc:'186 cm · 147 kg → 100 kg' },
   edit:   { display_name:'Edit',   calorie_target:1650, goal_weight_kg:80,  desc:'168 cm · 100 kg → 80 kg'  },
 }
 
