@@ -28,12 +28,12 @@ export default function MealPlanTab({ profile }) {
   const todayIdx = todayRaw === 0 ? 6 : todayRaw - 1
   const [sel, setSel] = useState(todayIdx)
 
-  const isShandu = profile.display_name === 'Shandu'
+  const isLevi = profile.display_name === 'Levi'
   const day = DAYS[sel]
-  const mine = isShandu ? day.dinner.shandu : day.dinner.edit
-  const theirs = isShandu ? day.dinner.edit : day.dinner.shandu
-  const partnerName = isShandu ? 'Edit' : 'Shandu'
-  const breakfastOpts = isShandu ? BREAKFAST_SHANDU : BREAKFAST_EDIT
+  const mine = isLevi ? day.dinner.shandu : day.dinner.edit
+  const theirs = isLevi ? day.dinner.edit : day.dinner.shandu
+  const partnerName = isLevi ? 'Edit' : 'Levi'
+  const breakfastOpts = isLevi ? BREAKFAST_SHANDU : BREAKFAST_EDIT
 
   return (
     <div>
@@ -66,7 +66,7 @@ export default function MealPlanTab({ profile }) {
       </div>
 
       <div style={s.card}>
-        <div style={s.sectionLbl}>{isShandu ? 'Reggeli (munkán) · ~640 kcal' : 'Reggeli (otthon) · ~480 kcal'}</div>
+        <div style={s.sectionLbl}>{isLevi ? 'Reggeli (munkán) · ~640 kcal' : 'Reggeli (otthon) · ~480 kcal'}</div>
         <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:10 }}>
           {breakfastOpts.map(o => (
             <div key={o.label} style={s.opt}>
@@ -76,7 +76,7 @@ export default function MealPlanTab({ profile }) {
         </div>
       </div>
 
-      {isShandu && (
+      {isLevi && (
         <div style={s.card}>
           <div style={s.sectionLbl}>Ebéd (otthon) · ~350 kcal</div>
           <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:8 }}>
