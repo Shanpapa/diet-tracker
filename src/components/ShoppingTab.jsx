@@ -38,37 +38,48 @@ export default function ShoppingTab() {
   const [loading, setLoading] = useState(true)
   const [newItem, setNewItem] = useState('')
   const [resetting, setResetting] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [err, setErr] = useState('')
 
-  useEffect(() => {
-    loadItems()
-    const channel = supabase.channel('shopping_realtime')
-      .on('postgres_changes', { event:'*', schema:'public', table:'shopping_items' }, loadItems)
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [])
+  useEffect(() => { loadItems() }, [])
 
   async function loadItems() {
-    const { data } = await supabase.from('shopping_items').select('*').order('category').order('created_at')
-    setItems(data || [])
+    const { data, error } = await supabase
+      .from('shopping_items').select('*').order('category').order('created_at')
+    if (error) setErr(error.message)
+    else setItems(data || [])
     setLoading(false)
   }
 
   async function toggle(item) {
     await supabase.from('shopping_items').update({ checked:!item.checked }).eq('id', item.id)
+    await loadItems()
   }
 
   async function resetList() {
     setResetting(true)
-    await supabase.from('shopping_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-    await supabase.from('shopping_items').insert(TEMPLATE.map(t => ({ ...t, checked:false })))
+    setErr('')
+    const { error: delErr } = await supabase.from('shopping_items')
+      .delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    if (delErr) { setErr(delErr.message); setResetting(false); return }
+    const { error: insErr } = await supabase.from('shopping_items')
+      .insert(TEMPLATE.map(t => ({ ...t, checked:false })))
+    if (insErr) setErr(insErr.message)
+    await loadItems()
     setResetting(false)
   }
 
   async function addItem(e) {
     e.preventDefault()
     if (!newItem.trim()) return
-    await supabase.from('shopping_items').insert({ name:newItem.trim(), category:'Egyéb', checked:false })
-    setNewItem('')
+    setAdding(true)
+    setErr('')
+    const { error } = await supabase.from('shopping_items')
+      .insert({ name:newItem.trim(), category:'Egyéb', checked:false })
+    if (error) setErr(error.message)
+    else setNewItem('')
+    await loadItems()
+    setAdding(false)
   }
 
   const done = items.filter(i => i.checked).length
@@ -84,11 +95,19 @@ export default function ShoppingTab() {
         </button>
       </div>
 
+      {err && <div style={s.errBox}>{err}</div>}
+
       <form onSubmit={addItem} style={{ display:'flex', gap:8, marginBottom:20 }}>
         <input value={newItem} onChange={e => setNewItem(e.target.value)}
           placeholder="Extra tétel..." style={s.input} />
-        <button type="submit" style={s.addBtn}>+</button>
+        <button type="submit" disabled={adding} style={s.addBtn}>{adding ? '…' : '+'}</button>
       </form>
+
+      {items.length === 0 && (
+        <div style={s.empty}>
+          A lista üres — nyomd meg a <strong>↺ Heti lista reset</strong> gombot a heti bevásárlólista betöltéséhez.
+        </div>
+      )}
 
       {CATS.map(cat => {
         const catItems = items.filter(i => i.category === cat)
@@ -121,4 +140,6 @@ const s = {
   item: { display:'flex', alignItems:'center', gap:12, padding:'13px 16px', borderBottom:'1px solid #1e1e1e', cursor:'pointer' },
   cb: { width:20, height:20, borderRadius:5, border:'1.5px solid #2a2a2a', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 },
   cbDone: { background:'#22c55e', borderColor:'#22c55e' },
+  errBox: { background:'#1a0000', border:'1px solid #3a0000', borderRadius:8, padding:'10px 14px', color:'#ef4444', fontSize:13, marginBottom:12 },
+  empty: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'20px 18px', color:'#a0a0a0', fontSize:14, lineHeight:1.6, marginBottom:16 },
 }
