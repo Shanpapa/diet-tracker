@@ -116,7 +116,9 @@ export default function MealPlanTab({ profile }) {
 
   async function loadPlan() {
     const { data } = await supabase.from('meal_plans').select('*')
-      .order('week_start', { ascending:false }).limit(1).maybeSingle()
+      .order('week_start', { ascending:false })
+      .order('created_at', { ascending:false })
+      .limit(1).maybeSingle()
     setPlan(data?.plan_data || null)
     setLoading(false)
   }
@@ -128,6 +130,8 @@ export default function MealPlanTab({ profile }) {
     try {
       const parsed = JSON.parse(importJson)
       if (!parsed.days || !parsed.week_start) throw new Error('Hiányzó week_start vagy days mező')
+      // töröljük a régi azonos dátumú rekordokat, hogy ne duplikálódjon
+      await supabase.from('meal_plans').delete().eq('week_start', parsed.week_start)
       const { error } = await supabase.from('meal_plans').insert({ week_start:parsed.week_start, plan_data:parsed })
       if (error) throw error
       await loadPlan()
