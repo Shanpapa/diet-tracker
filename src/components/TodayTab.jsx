@@ -1,26 +1,38 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 
-const MEALS = [
-  { key:'breakfast',    label:'Reggeli',   kcal_shandu:640, kcal_edit:480, time:'reggel' },
-  { key:'snack',        label:'Ebéd / nasi',kcal_shandu:350, kcal_edit:170, time:'délben' },
-  { key:'dinner',       label:'Vacsora',   kcal_shandu:900, kcal_edit:700, time:'17:00' },
-  { key:'evening_snack',label:'Esti nasi', kcal_shandu:60,  kcal_edit:80,  time:'este' },
-]
+const MEAL_ORDER = ['reggeli','tizorai','ebed','uzsonna','vacsora']
+const MEAL_LABELS = { reggeli:'Reggeli', tizorai:'Tízórai', ebed:'Ebéd', uzsonna:'Uzsonna', vacsora:'Vacsora' }
+const MEAL_TIMES = { reggeli:'reggel', tizorai:'délelőtt', ebed:'délben', uzsonna:'délután', vacsora:'17:00' }
 
 const today = () => new Date().toISOString().split('T')[0]
 
 export default function TodayTab({ profile, user }) {
-  const [checks, setChecks] = useState({ breakfast:false, snack:false, dinner:false, evening_snack:false })
+  const [checks, setChecks] = useState({ reggeli:false, tizorai:false, ebed:false, uzsonna:false, vacsora:false })
+  const [plan, setPlan] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const isShandu = profile.display_name === 'Shandu'
 
-  useEffect(() => { loadChecks() }, [])
+  const isLevi = profile.display_name === 'Levi'
+  const myKey = isLevi ? 'levi' : 'edit'
+
+  const todayRaw = new Date().getDay()
+  const todayIdx = todayRaw === 0 ? 6 : todayRaw - 1
+
+  useEffect(() => {
+    Promise.all([loadChecks(), loadPlan()]).then(() => setLoading(false))
+  }, [])
 
   async function loadChecks() {
     const { data } = await supabase.from('meal_checks').select('*')
       .eq('user_id', user.id).eq('check_date', today()).single()
-    if (data) setChecks({ breakfast:data.breakfast, snack:data.snack, dinner:data.dinner, evening_snack:data.evening_snack })
+    if (data) setChecks({ reggeli:data.reggeli, tizorai:data.tizorai, ebed:data.ebed, uzsonna:data.uzsonna, vacsora:data.vacsora })
+  }
+
+  async function loadPlan() {
+    const { data } = await supabase.from('meal_plans').select('*')
+      .order('week_start', { ascending:false }).limit(1).maybeSingle()
+    setPlan(data?.plan_data || null)
   }
 
   async function toggle(key) {
@@ -34,7 +46,29 @@ export default function TodayTab({ profile, user }) {
     setSaving(false)
   }
 
-  const eaten = MEALS.reduce((sum, m) => checks[m.key] ? sum + (isShandu ? m.kcal_shandu : m.kcal_edit) : sum, 0)
+  if (loading) return <div style={{ color:'#606060', textAlign:'center', paddingTop:40 }}>betöltés...</div>
+
+  if (!plan) return (
+    <div>
+      <div style={s.dateRow}>
+        <span style={s.date}>{new Date().toLocaleDateString('hu-HU', { weekday:'long', month:'long', day:'numeric' })}</span>
+      </div>
+      <div style={s.noPlan}>
+        <div style={{ fontSize:15, fontWeight:500, color:'#e8e8e8', marginBottom:8 }}>Nincs betöltve heti terv</div>
+        <div style={{ fontSize:13, color:'#606060' }}>Importálj egy tervet a Heti terv fülön, majd gyere vissza.</div>
+      </div>
+    </div>
+  )
+
+  const dayData = plan.days[todayIdx]
+  const dayMeals = dayData?.meals || []
+
+  const eaten = MEAL_ORDER.reduce((sum, key) => {
+    if (!checks[key]) return sum
+    const meal = dayMeals.find(m => m.type === key)
+    return sum + (meal?.[myKey]?.total_kcal || 0)
+  }, 0)
+
   const target = profile.calorie_target
   const pct = Math.min(Math.round((eaten / target) * 100), 100)
   const remaining = target - eaten
@@ -42,8 +76,8 @@ export default function TodayTab({ profile, user }) {
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-        <span style={{ fontSize:15, color:'#a0a0a0', fontWeight:500 }}>{dateStr}</span>
+      <div style={s.dateRow}>
+        <span style={s.date}>{dateStr}</span>
         {saving && <span style={{ fontSize:12, color:'#606060' }}>mentés...</span>}
       </div>
 
@@ -65,19 +99,21 @@ export default function TodayTab({ profile, user }) {
       </div>
 
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        {MEALS.map(m => {
-          const kcal = isShandu ? m.kcal_shandu : m.kcal_edit
-          const done = checks[m.key]
+        {MEAL_ORDER.map(key => {
+          const meal = dayMeals.find(m => m.type === key)
+          const kcal = meal?.[myKey]?.total_kcal || 0
+          const name = meal?.name || MEAL_LABELS[key]
+          const done = checks[key]
           return (
-            <div key={m.key} style={{ ...s.mealItem, ...(done ? s.mealDone : {}) }} onClick={() => toggle(m.key)}>
+            <div key={key} style={{ ...s.mealItem, ...(done ? s.mealDone : {}) }} onClick={() => toggle(key)}>
               <div style={{ ...s.cb, ...(done ? s.cbDone : {}) }}>
                 {done && <span style={{ color:'#0d1a0d', fontSize:12, fontWeight:700 }}>✓</span>}
               </div>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:15, fontWeight:500, color:'#e8e8e8' }}>{m.label}</div>
-                <div style={{ fontSize:12, color:'#606060', marginTop:2 }}>{m.time}</div>
+                <div style={{ fontSize:11, color:'#606060', fontWeight:500, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:2 }}>{MEAL_LABELS[key]} · {MEAL_TIMES[key]}</div>
+                <div style={{ fontSize:14, fontWeight:500, color:'#e8e8e8' }}>{name}</div>
               </div>
-              <div style={{ fontSize:13, color:'#a0a0a0', fontWeight:500 }}>~{kcal} kcal</div>
+              <div style={{ fontSize:13, color: done ? '#22c55e' : '#a0a0a0', fontWeight:500 }}>{kcal} kcal</div>
             </div>
           )
         })}
@@ -87,13 +123,16 @@ export default function TodayTab({ profile, user }) {
 }
 
 const s = {
+  dateRow: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
+  date: { fontSize:15, color:'#a0a0a0', fontWeight:500 },
   kcalCard: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'18px 20px', marginBottom:20 },
   bigNum: { fontSize:24, fontWeight:600, color:'#e8e8e8', lineHeight:1 },
   smallLabel: { fontSize:12, color:'#606060', marginTop:4 },
   progressBg: { background:'#2a2a2a', borderRadius:4, height:6, overflow:'hidden' },
   progressFill: { height:'100%', borderRadius:4, transition:'width 0.3s' },
-  mealItem: { display:'flex', alignItems:'center', gap:14, background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'16px 18px', cursor:'pointer' },
+  mealItem: { display:'flex', alignItems:'center', gap:14, background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'14px 18px', cursor:'pointer' },
   mealDone: { background:'#052e16', borderColor:'#14532d' },
   cb: { width:24, height:24, borderRadius:6, border:'2px solid #2a2a2a', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 },
   cbDone: { background:'#22c55e', borderColor:'#22c55e' },
+  noPlan: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'32px 24px', textAlign:'center' },
 }
