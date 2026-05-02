@@ -5,6 +5,55 @@ const MEAL_LABELS = { reggeli:'Reggeli', tizorai:'Tízórai', ebed:'Ebéd', uzso
 const MEAL_ORDER = ['reggeli','tizorai','ebed','uzsonna','vacsora']
 const DAY_SHORT = ['H','K','Sze','Cs','P','Szo','V']
 
+function MealCard({ meal, myKey, partnerKey, partnerName }) {
+  const [open, setOpen] = useState(false)
+  const mine = meal[myKey]
+  const theirs = meal[partnerKey]
+
+  return (
+    <div style={s.card}>
+      <div style={s.cardHeader}>
+        <div>
+          <div style={s.mealType}>{MEAL_LABELS[meal.type]}</div>
+          <div style={s.mealName}>{meal.name}</div>
+        </div>
+        <div style={s.myKcal}>{mine.total_kcal} kcal</div>
+      </div>
+
+      <div style={s.ingList}>
+        {mine.items.map((item, idx) => (
+          <div key={idx} style={s.ingRow}>
+            <span style={s.ingName}>{item.name}</span>
+            <span style={s.ingAmt}>{item.amount}</span>
+            <span style={s.ingKcal}>{item.kcal} kcal</span>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{ ...s.partnerBar, ...(open ? s.partnerBarOpen : {}) }}
+        onClick={() => setOpen(!open)}
+      >
+        <span style={s.partnerLbl}>{partnerName}</span>
+        <span style={s.partnerKcal}>{theirs.total_kcal} kcal</span>
+        <span style={{ fontSize:10, color:'#606060' }}>{open ? '▲ bezár' : '▼ részletek'}</span>
+      </div>
+
+      {open && (
+        <div style={s.partnerExpanded}>
+          {theirs.items.map((item, idx) => (
+            <div key={idx} style={s.partnerIngRow}>
+              <span style={s.ingName}>{item.name}</span>
+              <span style={s.ingAmt}>{item.amount}</span>
+              <span style={s.ingKcal}>{item.kcal} kcal</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function MealPlanTab({ profile }) {
   const [plan, setPlan] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -54,7 +103,7 @@ export default function MealPlanTab({ profile }) {
         <span style={{ fontSize:15, fontWeight:500, color:'#e8e8e8' }}>Heti terv importálása</span>
       </div>
       <p style={{ fontSize:13, color:'#a0a0a0', marginBottom:12, lineHeight:1.6 }}>
-        Illeszd be az új heti tervet JSON formátumban. Minden héten kapod tőlem a kész fájlt.
+        Illeszd be az új heti tervet JSON formátumban.
       </p>
       <form onSubmit={handleImport}>
         <textarea value={importJson} onChange={e => setImportJson(e.target.value)}
@@ -84,6 +133,7 @@ export default function MealPlanTab({ profile }) {
         <span style={{ fontSize:12, color:'#606060' }}>Hét: {plan.week_start}</span>
         <button onClick={() => setShowImport(true)} style={s.swapBtn}>↺ Új terv</button>
       </div>
+
       <div style={{ display:'flex', gap:6, marginBottom:20, overflowX:'auto' }}>
         {DAY_SHORT.map((d,i) => (
           <button key={i} onClick={() => setSelDay(i)}
@@ -92,36 +142,20 @@ export default function MealPlanTab({ profile }) {
           </button>
         ))}
       </div>
+
       <div style={s.dayTitle}>{dayData.day}</div>
+
       {MEAL_ORDER.map(mealType => {
         const meal = dayData.meals.find(m => m.type === mealType)
         if (!meal) return null
-        const mine = meal[myKey]
-        const theirs = meal[partnerKey]
         return (
-          <div key={mealType} style={s.card}>
-            <div style={s.cardHeader}>
-              <div>
-                <div style={s.mealType}>{MEAL_LABELS[mealType]}</div>
-                <div style={s.mealName}>{meal.name}</div>
-              </div>
-              <div style={s.myKcal}>{mine.total_kcal} kcal</div>
-            </div>
-            <div style={s.ingList}>
-              {mine.items.map((item,idx) => (
-                <div key={idx} style={s.ingRow}>
-                  <span style={s.ingName}>{item.name}</span>
-                  <span style={s.ingAmt}>{item.amount}</span>
-                  <span style={s.ingKcal}>{item.kcal} kcal</span>
-                </div>
-              ))}
-            </div>
-            <div style={s.partnerRow}>
-              <span style={s.partnerLbl}>{partnerName}:</span>
-              <span style={s.partnerKcal}>{theirs.total_kcal} kcal</span>
-              <span style={s.partnerDetail}>{theirs.items.map(i => i.amount).join(' · ')}</span>
-            </div>
-          </div>
+          <MealCard
+            key={mealType}
+            meal={meal}
+            myKey={myKey}
+            partnerKey={partnerKey}
+            partnerName={partnerName}
+          />
         )
       })}
     </div>
@@ -133,20 +167,22 @@ const s = {
   dayActive: { background:'#052e16', borderColor:'#22c55e', color:'#22c55e' },
   dayToday: { borderColor:'#3a3a3a' },
   dayTitle: { fontSize:22, fontWeight:600, color:'#e8e8e8', marginBottom:16 },
-  card: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'16px 18px', marginBottom:12 },
-  cardHeader: { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 },
+  card: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, overflow:'hidden', marginBottom:12 },
+  cardHeader: { display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'16px 18px 12px' },
   mealType: { fontSize:11, fontWeight:500, color:'#606060', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 },
   mealName: { fontSize:15, fontWeight:500, color:'#e8e8e8' },
   myKcal: { fontSize:16, fontWeight:600, color:'#22c55e', flexShrink:0 },
-  ingList: { borderTop:'1px solid #2a2a2a', paddingTop:10, marginBottom:10 },
+  ingList: { borderTop:'1px solid #2a2a2a', padding:'10px 18px 12px' },
   ingRow: { display:'flex', gap:8, padding:'5px 0', borderBottom:'1px solid #1a1a1a', alignItems:'center' },
   ingName: { flex:1, fontSize:13, color:'#e8e8e8' },
   ingAmt: { fontSize:13, color:'#a0a0a0', minWidth:70, textAlign:'right' },
   ingKcal: { fontSize:12, color:'#606060', minWidth:60, textAlign:'right' },
-  partnerRow: { display:'flex', alignItems:'center', gap:8, paddingTop:8, borderTop:'1px solid #2a2a2a', flexWrap:'wrap' },
+  partnerBar: { display:'flex', alignItems:'center', gap:8, padding:'11px 18px', borderTop:'1px solid #2a2a2a', cursor:'pointer', background:'#1a1a1a' },
+  partnerBarOpen: { background:'#1e1e1e', borderBottom:'1px solid #2a2a2a' },
   partnerLbl: { fontSize:12, color:'#606060', fontWeight:500 },
-  partnerKcal: { fontSize:13, fontWeight:500, color:'#a0a0a0' },
-  partnerDetail: { fontSize:12, color:'#4a4a4a', flex:1 },
+  partnerKcal: { fontSize:13, fontWeight:500, color:'#a0a0a0', flex:1 },
+  partnerExpanded: { background:'#1a1a1a', padding:'8px 18px 14px' },
+  partnerIngRow: { display:'flex', gap:8, padding:'5px 0', borderBottom:'1px solid #222', alignItems:'center' },
   backBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#a0a0a0', padding:'8px 14px', fontSize:13 },
   swapBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#606060', padding:'6px 12px', fontSize:13 },
   textarea: { width:'100%', background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, padding:'12px 14px', color:'#e8e8e8', fontSize:12, fontFamily:'monospace', outline:'none', resize:'vertical', lineHeight:1.6, marginBottom:12 },
