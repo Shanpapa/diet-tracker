@@ -11,20 +11,43 @@ const todayStr = () => new Date().toISOString().split('T')[0]
 
 function MealEditor({ mealType, currentItems, mealName, onSave, onCancel, dayBudget }) {
   const [items, setItems] = useState(currentItems || [])
+  const [recipes, setRecipes] = useState([])
+  const [showRecipes, setShowRecipes] = useState(false)
+
+  useEffect(() => { loadRecipes() }, [])
+
+  async function loadRecipes() {
+    const { data } = await supabase.from('recipes').select('*').order('name')
+    setRecipes(data || [])
+  }
 
   function addItem(item) { setItems(prev => [...prev, item]) }
   function removeItem(idx) { setItems(prev => prev.filter((_,i) => i !== idx)) }
 
+  function addRecipe(recipe) {
+    // Recept hozzáadása egy adagként
+    const recipeItem = {
+      name: recipe.name,
+      amount: '1 adag',
+      kcal: recipe.total_kcal,
+      protein: recipe.total_protein,
+      carbs: recipe.total_carbs || 0,
+      fat: recipe.total_fat || 0,
+      fiber: recipe.total_fiber || 0,
+    }
+    setItems(prev => [...prev, recipeItem])
+    setShowRecipes(false)
+  }
+
   const totals = {
-    kcal: items.reduce((a,i) => a + i.kcal, 0),
+    kcal: items.reduce((a,i) => a + (i.kcal||0), 0),
     protein: Math.round(items.reduce((a,i) => a + (i.protein||0), 0) * 10) / 10,
     fiber: Math.round(items.reduce((a,i) => a + (i.fiber||0), 0) * 10) / 10,
   }
 
-  const impact = dayBudget ? {
-    kcalAfter: dayBudget.eaten - dayBudget.currentMealKcal + totals.kcal,
-    remaining: dayBudget.target - (dayBudget.eaten - dayBudget.currentMealKcal + totals.kcal),
-  } : null
+  const newDayKcal = dayBudget ? (dayBudget.eaten - dayBudget.currentMealKcal + totals.kcal) : 0
+  const remaining = dayBudget ? (dayBudget.target - newDayKcal) : 0
+  const over = remaining < 0
 
   return (
     <div style={s.editorWrap}>
@@ -33,11 +56,22 @@ function MealEditor({ mealType, currentItems, mealName, onSave, onCancel, dayBud
           <div style={s.editorLabel}>{MEAL_LABELS[mealType]} szerkesztése</div>
           <div style={s.editorName}>{mealName}</div>
         </div>
-        <button onClick={onCancel} style={s.cancelBtn}>✕</button>
+        <button onClick={onCancel} style={s.cancelBtn}>✕ Mégse</button>
       </div>
 
+      {dayBudget && (
+        <div style={{ ...s.budgetBar, borderColor: over ? '#3a0000' : '#14532d', background: over ? '#1a0000' : '#052e16' }}>
+          <span style={{ fontSize:12, color:'#606060' }}>Ha ezt eszed, a nap:</span>
+          <span style={{ fontSize:15, fontWeight:600, color: over ? '#ef4444' : '#22c55e' }}>{newDayKcal} kcal</span>
+          <span style={{ fontSize:12, color: over ? '#ef4444' : '#a0a0a0' }}>
+            {over ? `${Math.abs(remaining)} kcal túllépve ⚠` : `${remaining} kcal marad`}
+          </span>
+        </div>
+      )}
+
       {items.length > 0 && (
-        <div style={s.currentItems}>
+        <div style={s.itemsBox}>
+          <div style={s.itemsTitle}>Összetevők</div>
           {items.map((item, idx) => (
             <div key={idx} style={s.itemRow}>
               <span style={s.itemName}>{item.name}</span>
@@ -48,30 +82,40 @@ function MealEditor({ mealType, currentItems, mealName, onSave, onCancel, dayBud
           ))}
           <div style={s.itemTotals}>
             <span style={s.totalKcal}>{totals.kcal} kcal</span>
-            <span style={s.totalMacro}>{totals.protein}g P · {totals.fiber}g rost</span>
+            <span style={s.totalMacro}>{totals.protein}g fehérje · {totals.fiber}g rost</span>
           </div>
         </div>
       )}
 
-      {impact && (
-        <div style={{ ...s.impactBox, borderColor: impact.remaining < 0 ? '#3a0000' : '#14532d', background: impact.remaining < 0 ? '#1a0000' : '#052e16' }}>
-          <span style={{ fontSize:12, color:'#606060' }}>Nap összesen ezzel:</span>
-          <span style={{ fontSize:15, fontWeight:600, color: impact.remaining < 0 ? '#ef4444' : '#22c55e' }}>{impact.kcalAfter} kcal</span>
-          <span style={{ fontSize:12, color: impact.remaining < 0 ? '#ef4444' : '#606060' }}>
-            {impact.remaining >= 0 ? `${impact.remaining} marad` : `${Math.abs(impact.remaining)} túllépve`}
-          </span>
+      {showRecipes ? (
+        <div style={s.recipesPanel}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+            <span style={s.panelTitle}>Receptjeim</span>
+            <button onClick={() => setShowRecipes(false)} style={s.smallBtn}>✕ Bezár</button>
+          </div>
+          {recipes.length === 0
+            ? <div style={s.emptyMsg}>Még nincs mentett recept.</div>
+            : recipes.map(r => (
+              <div key={r.id} style={s.recipeItem} onClick={() => addRecipe(r)}>
+                <span style={s.recipeName}>{r.name}</span>
+                <span style={s.recipeMeta}>{r.total_kcal} kcal · {r.total_protein}g P · {r.servings} adag</span>
+              </div>
+            ))
+          }
+        </div>
+      ) : (
+        <div style={s.addSection}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+            <span style={s.panelTitle}>Alapanyag hozzáadása</span>
+            <button onClick={() => setShowRecipes(true)} style={s.recipeBtn}>♨ Receptből</button>
+          </div>
+          <FoodSearch onAdd={addItem} />
         </div>
       )}
 
-      <div style={s.searchSection}>
-        <div style={s.searchLabel}>Alapanyag hozzáadása</div>
-        <FoodSearch onAdd={addItem} />
-      </div>
-
-      <div style={s.editorActions}>
-        <button onClick={onCancel} style={s.cancelActionBtn}>Mégse</button>
-        <button onClick={() => onSave(items, totals)} style={s.saveBtn}>✓ Mentés</button>
-      </div>
+      <button onClick={() => onSave(items, totals)} style={s.saveBtn}>
+        ✓ Mentés
+      </button>
     </div>
   )
 }
@@ -138,26 +182,9 @@ export default function TodayTab({ profile, user }) {
       total_fiber: totals.fiber || 0,
     }
     await supabase.from('daily_overrides').upsert(record, { onConflict:'user_id,override_date,meal_type' })
-    setOverrides(prev => ({ ...prev, [mealType]: { ...record } }))
+    setOverrides(prev => ({ ...prev, [mealType]: record }))
     setEditingMeal(null)
   }
-
-  if (loading) return <div style={{ color:'#606060', textAlign:'center', paddingTop:40 }}>betöltés...</div>
-
-  if (!plan && !editingMeal) return (
-    <div>
-      <div style={s.dateRow}>
-        <span style={s.date}>{new Date().toLocaleDateString('hu-HU', { weekday:'long', month:'long', day:'numeric' })}</span>
-      </div>
-      <div style={s.noPlan}>
-        <div style={{ fontSize:15, fontWeight:500, color:'#e8e8e8', marginBottom:8 }}>Nincs betöltve heti terv</div>
-        <div style={{ fontSize:13, color:'#606060' }}>Importálj egy tervet a Heti terv fülön.</div>
-      </div>
-    </div>
-  )
-
-  const dayData = plan?.days[todayIdx]
-  const dayMeals = dayData?.meals || []
 
   function getMealData(key) {
     const override = overrides[key]
@@ -168,7 +195,7 @@ export default function TodayTab({ profile, user }) {
       total_protein: override.total_protein,
       isOverride: true,
     }
-    const meal = dayMeals.find(m => m.type === key)
+    const meal = plan?.days[todayIdx]?.meals?.find(m => m.type === key)
     if (!meal) return null
     return {
       name: meal.name,
@@ -179,21 +206,9 @@ export default function TodayTab({ profile, user }) {
     }
   }
 
-  const eaten = MEAL_ORDER.reduce((sum, key) => {
-    if (!checks[key]) return sum
-    return sum + (getMealData(key)?.total_kcal || 0)
-  }, 0)
-
-  const proteinEaten = MEAL_ORDER.reduce((sum, key) => {
-    if (!checks[key]) return sum
-    return sum + (getMealData(key)?.total_protein || 0)
-  }, 0)
-
-  // Tervezett de még nem evett kalória
-  const planned = MEAL_ORDER.reduce((sum, key) => {
-    if (checks[key]) return sum
-    return sum + (getMealData(key)?.total_kcal || 0)
-  }, 0)
+  const eaten = MEAL_ORDER.reduce((sum, key) => checks[key] ? sum + (getMealData(key)?.total_kcal || 0) : sum, 0)
+  const planned = MEAL_ORDER.reduce((sum, key) => !checks[key] ? sum + (getMealData(key)?.total_kcal || 0) : sum, 0)
+  const proteinEaten = MEAL_ORDER.reduce((sum, key) => checks[key] ? sum + (getMealData(key)?.total_protein || 0) : sum, 0)
 
   const kcalTarget = profile.calorie_target
   const proteinTarget = PROTEIN_TARGET[profile.display_name] || 120
@@ -201,6 +216,8 @@ export default function TodayTab({ profile, user }) {
   const proteinPct = Math.min(Math.round((proteinEaten / proteinTarget) * 100), 100)
   const remaining = kcalTarget - eaten
   const proteinRemaining = proteinTarget - Math.round(proteinEaten)
+
+  if (loading) return <div style={{ color:'#606060', textAlign:'center', paddingTop:40 }}>betöltés...</div>
 
   if (editingMeal) {
     const mealData = getMealData(editingMeal)
@@ -247,9 +264,7 @@ export default function TodayTab({ profile, user }) {
           <div style={{ ...s.progressFill, width:`${kcalPct}%`, background: kcalPct >= 100 ? '#ef4444' : '#22c55e' }} />
         </div>
         <div style={s.progressLabel}>{kcalPct}% — cél: {kcalTarget} kcal</div>
-
         <div style={s.divider} />
-
         <div style={s.statsRow}>
           <div>
             <div style={{ ...s.bigNum, fontSize:20 }}>{Math.round(proteinEaten)}g fehérje</div>
@@ -268,6 +283,13 @@ export default function TodayTab({ profile, user }) {
         <div style={s.progressLabel}>{proteinPct}% — cél: {proteinTarget}g fehérje</div>
       </div>
 
+      {!plan && (
+        <div style={s.noPlan}>
+          <div style={{ fontSize:15, fontWeight:500, color:'#e8e8e8', marginBottom:8 }}>Nincs betöltve heti terv</div>
+          <div style={{ fontSize:13, color:'#606060' }}>Importálj egy tervet a Heti terv fülön, vagy szerkeszd az étkezéseket manuálisan a ✎ gombbal.</div>
+        </div>
+      )}
+
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
         {MEAL_ORDER.map(key => {
           const mealData = getMealData(key)
@@ -285,15 +307,17 @@ export default function TodayTab({ profile, user }) {
               <div style={{ flex:1 }} onClick={() => toggle(key)}>
                 <div style={{ fontSize:11, color:'#606060', fontWeight:500, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:2 }}>
                   {MEAL_LABELS[key]} · {MEAL_TIMES[key]}
-                  {isOverride && <span style={s.overrideBadge}>szerkesztett</span>}
+                  {isOverride && <span style={s.badge}>módosított</span>}
                 </div>
-                <div style={{ fontSize:14, fontWeight:500, color:'#e8e8e8' }}>{name}</div>
+                <div style={{ fontSize:14, fontWeight:500, color: mealData ? '#e8e8e8' : '#606060' }}>
+                  {mealData ? name : 'Nincs beállítva — kattints ✎'}
+                </div>
               </div>
               <div style={{ textAlign:'right', marginRight:8 }}>
-                <div style={{ fontSize:13, color: done ? '#22c55e' : '#a0a0a0', fontWeight:500 }}>{kcal} kcal</div>
+                {kcal > 0 && <div style={{ fontSize:13, color: done ? '#22c55e' : '#a0a0a0', fontWeight:500 }}>{kcal} kcal</div>}
                 {protein > 0 && <div style={{ fontSize:11, color:'#3b82f6', marginTop:2 }}>{Math.round(protein)}g P</div>}
               </div>
-              <button onClick={() => setEditingMeal(key)} style={s.editBtn}>✎</button>
+              <button onClick={() => setEditingMeal(key)} style={s.editBtn} title="Szerkesztés">✎</button>
             </div>
           )
         })}
@@ -313,32 +337,38 @@ const s = {
   progressFill: { height:'100%', borderRadius:4, transition:'width 0.3s' },
   progressLabel: { fontSize:12, color:'#606060', marginTop:6 },
   divider: { height:'1px', background:'#2a2a2a', margin:'16px 0' },
-  mealItem: { display:'flex', alignItems:'center', gap:10, background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'12px 14px', cursor:'default' },
+  mealItem: { display:'flex', alignItems:'center', gap:10, background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'12px 14px' },
   mealDone: { background:'#052e16', borderColor:'#14532d' },
   cb: { width:24, height:24, borderRadius:6, border:'2px solid #2a2a2a', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, cursor:'pointer' },
   cbDone: { background:'#22c55e', borderColor:'#22c55e' },
-  overrideBadge: { marginLeft:6, background:'#1a1a3a', color:'#3b82f6', fontSize:10, padding:'1px 6px', borderRadius:10, border:'1px solid #3b82f633' },
+  badge: { marginLeft:6, background:'#1a1a3a', color:'#3b82f6', fontSize:10, padding:'1px 6px', borderRadius:10, border:'1px solid #3b82f633' },
   editBtn: { background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:6, color:'#606060', padding:'6px 10px', fontSize:13, cursor:'pointer', flexShrink:0 },
-  noPlan: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'32px 24px', textAlign:'center' },
-  // Editor styles
+  noPlan: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'20px 24px', marginBottom:16, textAlign:'center' },
+  // Editor
   editorWrap: { display:'flex', flexDirection:'column', gap:14 },
   editorHeader: { display:'flex', justifyContent:'space-between', alignItems:'flex-start' },
   editorLabel: { fontSize:11, color:'#606060', fontWeight:500, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 },
   editorName: { fontSize:16, fontWeight:500, color:'#e8e8e8' },
-  cancelBtn: { background:'none', border:'none', color:'#606060', fontSize:18, cursor:'pointer' },
-  currentItems: { background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:8, overflow:'hidden' },
+  cancelBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#606060', padding:'6px 12px', fontSize:12, cursor:'pointer' },
+  budgetBar: { display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:8, border:'1px solid', flexWrap:'wrap' },
+  itemsBox: { background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:8, overflow:'hidden' },
+  itemsTitle: { fontSize:11, color:'#606060', fontWeight:500, textTransform:'uppercase', letterSpacing:'0.5px', padding:'8px 14px', background:'#111', borderBottom:'1px solid #222' },
   itemRow: { display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:'1px solid #222' },
   itemName: { flex:1, fontSize:13, color:'#e8e8e8' },
-  itemAmt: { fontSize:12, color:'#a0a0a0', minWidth:60, textAlign:'right' },
+  itemAmt: { fontSize:12, color:'#a0a0a0', minWidth:55 },
   itemKcal: { fontSize:12, color:'#606060', minWidth:55, textAlign:'right' },
   removeBtn: { background:'none', border:'none', color:'#606060', fontSize:12, cursor:'pointer' },
   itemTotals: { display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'#111' },
   totalKcal: { fontSize:15, fontWeight:600, color:'#22c55e' },
   totalMacro: { fontSize:12, color:'#606060' },
-  impactBox: { display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:8, border:'1px solid', flexWrap:'wrap' },
-  searchSection: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'14px 16px' },
-  searchLabel: { fontSize:12, color:'#606060', fontWeight:500, marginBottom:10 },
-  editorActions: { display:'flex', gap:10 },
-  cancelActionBtn: { flex:1, background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#a0a0a0', padding:12, fontSize:14, cursor:'pointer' },
-  saveBtn: { flex:2, background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:12, fontSize:14, fontWeight:600, cursor:'pointer' },
+  addSection: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'14px' },
+  panelTitle: { fontSize:12, color:'#a0a0a0', fontWeight:500 },
+  recipeBtn: { background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, color:'#22c55e', padding:'6px 12px', fontSize:12, cursor:'pointer' },
+  recipesPanel: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'14px' },
+  smallBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:6, color:'#606060', padding:'4px 10px', fontSize:11, cursor:'pointer' },
+  recipeItem: { padding:'10px 0', borderBottom:'1px solid #2a2a2a', cursor:'pointer' },
+  recipeName: { display:'block', fontSize:14, color:'#e8e8e8', marginBottom:3 },
+  recipeMeta: { fontSize:12, color:'#606060' },
+  emptyMsg: { fontSize:13, color:'#606060', textAlign:'center', padding:'16px 0' },
+  saveBtn: { background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:14, fontSize:15, fontWeight:600, cursor:'pointer' },
 }
