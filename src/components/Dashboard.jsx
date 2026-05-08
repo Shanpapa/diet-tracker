@@ -15,7 +15,14 @@ const TABS = [
 ]
 
 export default function Dashboard({ profile, user }) {
-  const [tab, setTab] = useState('today')
+  const saved = localStorage.getItem('dt_active_tab')
+  const VALID = ['today','weight','meals','shopping','recipes']
+  const [tab, setTab] = useState(VALID.includes(saved) ? saved : 'today')
+
+  function switchTab(id) {
+    setTab(id)
+    localStorage.setItem('dt_active_tab', id)
+  }
 
   return (
     <div style={s.app}>
@@ -30,14 +37,14 @@ export default function Dashboard({ profile, user }) {
       <main style={s.main}>
         {tab === 'today'    && <TodayTab    profile={profile} user={user} />}
         {tab === 'weight'   && <WeightTab   profile={profile} user={user} />}
-        {tab === 'meals'    && <MealPlanTab profile={profile} />}
+        {tab === 'meals'    && <MealPlanTab profile={profile} user={user} />}
         {tab === 'shopping' && <ShoppingTab />}
         {tab === 'recipes'  && <RecipesTab />}
       </main>
 
       <nav style={s.nav}>
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => switchTab(t.id)}
             style={{ ...s.navBtn, ...(tab === t.id ? s.navActive : {}) }}>
             <span style={{ fontSize:18 }}>{t.icon}</span>
             <span style={{ fontSize:10 }}>{t.label}</span>
