@@ -109,6 +109,7 @@ function ManualEntry({ onAdd, onCancel }) {
   const [form, setForm] = useState({ name:'', kcal_100g:'', protein_100g:'', carbs_100g:'', fat_100g:'', fiber_100g:'' })
   const [grams, setGrams] = useState('')
   const [saving, setSaving] = useState(false)
+  const [success, setSuccess] = useState('')
 
   const f = v => parseFloat(v) || 0
   const valid = form.name.trim() && f(form.kcal_100g) > 0 && f(grams) > 0
@@ -127,6 +128,10 @@ function ManualEntry({ onAdd, onCancel }) {
     await supabase.from('custom_ingredients').insert(ing)
     const item = calcItem(ing, f(grams))
     onAdd(item)
+    setSuccess(`✓ ${ing.name} hozzáadva!`)
+    setForm({ name:'', kcal_100g:'', protein_100g:'', carbs_100g:'', fat_100g:'', fiber_100g:'' })
+    setGrams('')
+    setTimeout(() => setSuccess(''), 3000)
     setSaving(false)
   }
 
@@ -134,6 +139,7 @@ function ManualEntry({ onAdd, onCancel }) {
     <div style={s.manualBox}>
       <div style={s.manualTitle}>Saját alapanyag hozzáadása</div>
       <div style={s.manualNote}>Az értékeket a csomagoláson lévő táblázatból add meg (100g-ra).</div>
+      {success && <div style={{ background:'#052e16', border:'1px solid #22c55e', borderRadius:8, padding:'10px 14px', color:'#22c55e', fontSize:13 }}>{success}</div>}
       <input value={form.name} onChange={e => setForm(p=>({...p,name:e.target.value}))} placeholder="Alapanyag neve" style={s.manInput} />
       <div style={s.manualGrid}>
         {[['kcal_100g','Kalória (kcal)'],['protein_100g','Fehérje (g)'],['carbs_100g','Szénhidrát (g)'],['fat_100g','Zsír (g)'],['fiber_100g','Rost (g)']].map(([k,l]) => (
@@ -179,6 +185,11 @@ export default function FoodSearch({ onAdd }) {
   async function loadCustom() {
     const { data } = await supabase.from('custom_ingredients').select('*').order('created_at', { ascending:false })
     setCustomList(data || [])
+  }
+
+  async function deleteCustom(id) {
+    await supabase.from('custom_ingredients').delete().eq('id', id)
+    setCustomList(prev => prev.filter(i => i.id !== id))
   }
 
   const builtinFiltered = query.trim()
@@ -254,9 +265,14 @@ export default function FoodSearch({ onAdd }) {
                   <>
                     <div style={s.listSection}>Saját alapanyagaim</div>
                     {customFiltered.map((i,idx) => (
-                      <div key={idx} style={s.listItem} onClick={() => setSelected(i)}>
-                        <span style={s.listName}>{i.name}</span>
-                        <span style={s.listMeta}>{i.kcal_100g} kcal · {i.protein_100g}g P</span>
+                      <div key={idx} style={{ ...s.listItem, display:'flex', alignItems:'center' }}>
+                        <div style={{ flex:1 }} onClick={() => setSelected(i)}>
+                          <span style={s.listName}>{i.name}</span>
+                          <span style={s.listMeta}>{i.kcal_100g} kcal · {i.protein_100g}g P</span>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); deleteCustom(i.id) }}
+                          style={{ background:'none', border:'none', color:'#606060', fontSize:13, cursor:'pointer', padding:'4px 8px' }}
+                          title="Törlés">✕</button>
                       </div>
                     ))}
                     <div style={s.listSection}>Beépített lista</div>
@@ -360,4 +376,5 @@ const s = {
   manNumInput: { background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, padding:'8px 10px', color:'#e8e8e8', fontSize:13, outline:'none' },
   manActions: { display:'flex', gap:8 },
   cancelActionBtn: { flex:1, background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#a0a0a0', padding:10, fontSize:13, cursor:'pointer' },
+  successMsg: { background:'#052e16', border:'1px solid #22c55e', borderRadius:8, padding:'10px 14px', color:'#22c55e', fontSize:13 },
 }
