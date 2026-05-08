@@ -27,9 +27,7 @@ function PatchNotes({ notes }) {
           <div style={s.patchRow}>
             <span style={s.patchLabel}>Élvezeti ételek</span>
             <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-              {notes.elvezetiek.map((e,i) => (
-                <span key={i} style={s.chip}>{e}</span>
-              ))}
+              {(notes.elvezetiek||[]).map((e,i) => <span key={i} style={s.chip}>{e}</span>)}
             </div>
           </div>
           {notes.highlights && (
@@ -61,6 +59,7 @@ function InlineEditor({ mealType, mealName, currentItems, onSave, onCancel }) {
   function addItem(item) { setItems(prev => [...prev, item]) }
   function removeItem(idx) { setItems(prev => prev.filter((_,i) => i !== idx)) }
   const total = items.reduce((a,i) => a + (i.kcal||0), 0)
+  const totalP = Math.round(items.reduce((a,i) => a + (i.protein||0), 0) * 10) / 10
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
@@ -68,50 +67,58 @@ function InlineEditor({ mealType, mealName, currentItems, onSave, onCancel }) {
           <div style={{ fontSize:11, color:'#606060', fontWeight:500, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>{MEAL_LABELS[mealType]} szerkesztése</div>
           <div style={{ fontSize:16, fontWeight:500, color:'#e8e8e8' }}>{mealName}</div>
         </div>
-        <button onClick={onCancel} style={{ background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#606060', padding:'6px 12px', fontSize:12, cursor:'pointer' }}>✕ Mégse</button>
+        <button onClick={onCancel} style={s.backBtn}>✕ Mégse</button>
       </div>
       {items.length > 0 && (
-        <div style={{ background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:8, overflow:'hidden' }}>
-          <div style={{ fontSize:11, color:'#606060', fontWeight:500, textTransform:'uppercase', letterSpacing:'0.5px', padding:'8px 14px', background:'#111', borderBottom:'1px solid #222' }}>Összetevők</div>
+        <div style={s.itemsBox}>
+          <div style={s.itemsTitle}>Összetevők</div>
           {items.map((item, idx) => (
-            <div key={idx} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:'1px solid #222' }}>
-              <span style={{ flex:1, fontSize:13, color:'#e8e8e8' }}>{item.name}</span>
-              <span style={{ fontSize:12, color:'#a0a0a0', minWidth:55 }}>{item.amount}</span>
-              <span style={{ fontSize:12, color:'#606060', minWidth:55, textAlign:'right' }}>{item.kcal} kcal</span>
-              <button onClick={() => removeItem(idx)} style={{ background:'none', border:'none', color:'#606060', fontSize:12, cursor:'pointer' }}>✕</button>
+            <div key={idx} style={s.itemRow}>
+              <span style={s.itemName}>{item.name}</span>
+              <span style={s.itemAmt}>{item.amount}</span>
+              <span style={s.itemKcal}>{item.kcal} kcal</span>
+              <button onClick={() => removeItem(idx)} style={s.removeBtn}>✕</button>
             </div>
           ))}
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'#111' }}>
-            <span style={{ fontSize:15, fontWeight:600, color:'#22c55e' }}>{total} kcal</span>
+          <div style={s.itemTotals}>
+            <span style={s.totalKcal}>{total} kcal</span>
+            <span style={{ fontSize:12, color:'#606060' }}>{totalP}g fehérje</span>
           </div>
         </div>
       )}
-      <div style={{ background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'14px' }}>
+      <div style={s.searchBox}>
         <div style={{ fontSize:12, color:'#a0a0a0', fontWeight:500, marginBottom:10 }}>Alapanyag hozzáadása</div>
         <FoodSearch onAdd={addItem} />
       </div>
-      <button onClick={() => onSave(items)} style={{ background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:14, fontSize:15, fontWeight:600, cursor:'pointer' }}>
-        ✓ Mentés
-      </button>
+      <button onClick={() => onSave(items)} style={s.saveBtn}>✓ Mentés</button>
     </div>
   )
 }
 
-function MealCard({ meal, myKey, partnerKey, partnerName }) {
+function MealCard({ meal, myKey, partnerKey, partnerName, override, onEdit }) {
   const [open, setOpen] = useState(false)
-  const mine = meal[myKey]
+  const mine = override
+    ? { items: override.items || [], total_kcal: override.total_kcal }
+    : meal[myKey]
   const theirs = meal[partnerKey]
+  const isOverride = !!override
   return (
     <div style={s.card}>
       <div style={s.cardHeader}>
-        <div>
-          <div style={s.mealType}>{MEAL_LABELS[meal.type]}</div>
-          <div style={s.mealName}>{meal.name}</div>
+        <div style={{ flex:1 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+            <span style={s.mealType}>{MEAL_LABELS[meal.type]}</span>
+            {isOverride && <span style={s.overrideBadge}>módosított</span>}
+          </div>
+          <div style={s.mealName}>{isOverride ? (override.meal_name || meal.name) : meal.name}</div>
         </div>
-        <div style={s.myKcal}>{mine.total_kcal} kcal</div>
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+          <div style={s.myKcal}>{mine.total_kcal} kcal</div>
+          <button onClick={onEdit} style={s.editBtn} title="Szerkesztés">✎</button>
+        </div>
       </div>
       <div style={s.ingList}>
-        {mine.items.map((item, idx) => (
+        {(mine.items || []).map((item, idx) => (
           <div key={idx} style={s.ingRow}>
             <span style={s.ingName}>{item.name}</span>
             <span style={s.ingAmt}>{item.amount}</span>
@@ -126,7 +133,7 @@ function MealCard({ meal, myKey, partnerKey, partnerName }) {
       </div>
       {open && (
         <div style={s.partnerExpanded}>
-          {theirs.items.map((item, idx) => (
+          {(theirs.items || []).map((item, idx) => (
             <div key={idx} style={s.partnerIngRow}>
               <span style={s.ingName}>{item.name}</span>
               <span style={s.ingAmt}>{item.amount}</span>
@@ -157,7 +164,10 @@ export default function MealPlanTab({ profile, user }) {
   const partnerKey = isLevi ? 'edit' : 'levi'
   const partnerName = isLevi ? 'Edit' : 'Levi'
 
-  useEffect(() => { loadPlan(); loadOverrides() }, [])
+  useEffect(() => {
+    loadPlan()
+    if (user) loadOverrides()
+  }, [])
 
   async function loadPlan() {
     const { data } = await supabase.from('meal_plans').select('*')
@@ -168,33 +178,23 @@ export default function MealPlanTab({ profile, user }) {
     setLoading(false)
   }
 
-  async function loadOverrides(dateStr) {
-    if (!user) return
-    const { data } = await supabase.from('daily_overrides').select('*')
-      .eq('user_id', user.id)
+  async function loadOverrides() {
+    const { data } = await supabase.from('daily_overrides').select('*').eq('user_id', user.id)
     const map = {}
-    ;(data || []).forEach(o => {
-      const key = o.override_date + '_' + o.meal_type
-      map[key] = o
-    })
+    ;(data || []).forEach(o => { map[o.override_date + '_' + o.meal_type] = o })
     setOverrides(map)
   }
 
-  function getOverride(dayIdx, mealType) {
-    if (!plan) return null
-    const day = plan.days[dayIdx]
-    if (!day) return null
-    const date = getDateForDayIdx(dayIdx)
-    return overrides[date + '_' + mealType] || null
-  }
-
   function getDateForDayIdx(dayIdx) {
-    // Calculate the actual date for the given day index based on week_start
     if (!plan?.week_start) return ''
-    const weekStart = new Date(plan.week_start)
-    const d = new Date(weekStart)
+    const d = new Date(plan.week_start)
     d.setDate(d.getDate() + dayIdx)
     return d.toISOString().split('T')[0]
+  }
+
+  function getOverride(dayIdx, mealType) {
+    const date = getDateForDayIdx(dayIdx)
+    return overrides[date + '_' + mealType] || null
   }
 
   async function saveOverride(dayIdx, mealType, mealName, items) {
@@ -222,7 +222,6 @@ export default function MealPlanTab({ profile, user }) {
     try {
       const parsed = JSON.parse(importJson)
       if (!parsed.days || !parsed.week_start) throw new Error('Hiányzó week_start vagy days mező')
-      // töröljük a régi azonos dátumú rekordokat, hogy ne duplikálódjon
       await supabase.from('meal_plans').delete().eq('week_start', parsed.week_start)
       const { error } = await supabase.from('meal_plans').insert({ week_start:parsed.week_start, plan_data:parsed })
       if (error) throw error
@@ -264,14 +263,12 @@ export default function MealPlanTab({ profile, user }) {
     </div>
   )
 
-  const dayData = plan.days[selDay]
-
-  // Inline editor
+  // Inline editor nézet
   if (editingDay !== null && editingMeal) {
     const meal = plan.days[editingDay]?.meals?.find(m => m.type === editingMeal)
     const override = getOverride(editingDay, editingMeal)
     const currentItems = override ? override.items : (meal?.[myKey]?.items || [])
-    const mealName = override ? override.meal_name : (meal?.name || MEAL_LABELS[editingMeal])
+    const mealName = meal?.name || MEAL_LABELS[editingMeal]
     return (
       <InlineEditor
         mealType={editingMeal}
@@ -282,6 +279,8 @@ export default function MealPlanTab({ profile, user }) {
       />
     )
   }
+
+  const dayData = plan.days[selDay]
 
   return (
     <div>
@@ -306,8 +305,17 @@ export default function MealPlanTab({ profile, user }) {
       {MEAL_ORDER.map(mealType => {
         const meal = dayData.meals.find(m => m.type === mealType)
         if (!meal) return null
+        const override = getOverride(selDay, mealType)
         return (
-          <MealCard key={mealType} meal={meal} myKey={myKey} partnerKey={partnerKey} partnerName={partnerName} />
+          <MealCard
+            key={mealType}
+            meal={meal}
+            myKey={myKey}
+            partnerKey={partnerKey}
+            partnerName={partnerName}
+            override={override}
+            onEdit={() => { setEditingDay(selDay); setEditingMeal(mealType) }}
+          />
         )
       })}
     </div>
@@ -328,15 +336,17 @@ const s = {
   highlight: { display:'flex', gap:8, alignItems:'flex-start' },
   dot: { fontSize:8, color:'#22c55e', marginTop:3, flexShrink:0 },
   macroCel: { borderTop:'1px solid #2a2a2a', paddingTop:10 },
-  dayBtn: { flexShrink:0, width:38, height:38, borderRadius:8, background:'#1e1e1e', border:'1px solid #2a2a2a', color:'#a0a0a0', fontSize:12, fontWeight:500 },
+  dayBtn: { flexShrink:0, width:38, height:38, borderRadius:8, background:'#1e1e1e', border:'1px solid #2a2a2a', color:'#a0a0a0', fontSize:12, fontWeight:500, cursor:'pointer' },
   dayActive: { background:'#052e16', borderColor:'#22c55e', color:'#22c55e' },
   dayToday: { borderColor:'#3a3a3a' },
   dayTitle: { fontSize:22, fontWeight:600, color:'#e8e8e8', marginBottom:16 },
   card: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, overflow:'hidden', marginBottom:12 },
   cardHeader: { display:'flex', justifyContent:'space-between', alignItems:'flex-start', padding:'16px 18px 12px' },
-  mealType: { fontSize:11, fontWeight:500, color:'#606060', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 },
-  mealName: { fontSize:15, fontWeight:500, color:'#e8e8e8' },
-  myKcal: { fontSize:16, fontWeight:600, color:'#22c55e', flexShrink:0 },
+  mealType: { fontSize:11, fontWeight:500, color:'#606060', textTransform:'uppercase', letterSpacing:'0.5px' },
+  overrideBadge: { background:'#1a1a3a', color:'#3b82f6', fontSize:10, padding:'1px 6px', borderRadius:10, border:'1px solid #3b82f633' },
+  mealName: { fontSize:15, fontWeight:500, color:'#e8e8e8', marginTop:4 },
+  myKcal: { fontSize:16, fontWeight:600, color:'#22c55e' },
+  editBtn: { background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:6, color:'#606060', padding:'5px 9px', fontSize:13, cursor:'pointer' },
   ingList: { borderTop:'1px solid #2a2a2a', padding:'10px 18px 12px' },
   ingRow: { display:'flex', gap:8, padding:'5px 0', borderBottom:'1px solid #1a1a1a', alignItems:'center' },
   ingName: { flex:1, fontSize:13, color:'#e8e8e8' },
@@ -348,12 +358,21 @@ const s = {
   partnerKcal: { fontSize:13, fontWeight:500, color:'#a0a0a0', flex:1 },
   partnerExpanded: { background:'#1a1a1a', padding:'8px 18px 14px' },
   partnerIngRow: { display:'flex', gap:8, padding:'5px 0', borderBottom:'1px solid #222', alignItems:'center' },
-  backBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#a0a0a0', padding:'8px 14px', fontSize:13 },
-  swapBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#606060', padding:'6px 12px', fontSize:13 },
-  overrideBadge: { marginLeft:6, background:'#1a1a3a', color:'#3b82f6', fontSize:10, padding:'1px 6px', borderRadius:10, border:'1px solid #3b82f633' },
-  editBtn: { background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:6, color:'#606060', padding:'5px 9px', fontSize:12, cursor:'pointer', flexShrink:0 },
+  backBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#a0a0a0', padding:'8px 14px', fontSize:13, cursor:'pointer' },
+  swapBtn: { background:'none', border:'1px solid #2a2a2a', borderRadius:8, color:'#606060', padding:'6px 12px', fontSize:13, cursor:'pointer' },
   textarea: { width:'100%', background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, padding:'12px 14px', color:'#e8e8e8', fontSize:12, fontFamily:'monospace', outline:'none', resize:'vertical', lineHeight:1.6, marginBottom:12 },
-  greenBtn: { width:'100%', background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:14, fontSize:15, fontWeight:600 },
+  greenBtn: { width:'100%', background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:14, fontSize:15, fontWeight:600, cursor:'pointer' },
   errBox: { background:'#1a0000', border:'1px solid #3a0000', borderRadius:8, padding:'10px 14px', color:'#ef4444', fontSize:13, marginBottom:12 },
   emptyWrap: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'32px 24px', textAlign:'center' },
+  itemsBox: { background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:8, overflow:'hidden' },
+  itemsTitle: { fontSize:11, color:'#606060', fontWeight:500, textTransform:'uppercase', letterSpacing:'0.5px', padding:'8px 14px', background:'#111', borderBottom:'1px solid #222' },
+  itemRow: { display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:'1px solid #222' },
+  itemName: { flex:1, fontSize:13, color:'#e8e8e8' },
+  itemAmt: { fontSize:12, color:'#a0a0a0', minWidth:55 },
+  itemKcal: { fontSize:12, color:'#606060', minWidth:55, textAlign:'right' },
+  removeBtn: { background:'none', border:'none', color:'#606060', fontSize:12, cursor:'pointer' },
+  itemTotals: { display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'#111' },
+  totalKcal: { fontSize:15, fontWeight:600, color:'#22c55e' },
+  searchBox: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'14px' },
+  saveBtn: { background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:14, fontSize:15, fontWeight:600, cursor:'pointer' },
 }
