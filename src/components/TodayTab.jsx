@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import FoodSearch from './FoodSearch'
+import WeeklySummary from './WeeklySummary'
 
 const MEAL_ORDER = ['reggeli','tizorai','ebed','uzsonna','vacsora']
 const MEAL_LABELS = { reggeli:'Reggeli', tizorai:'Tízórai', ebed:'Ebéd', uzsonna:'Uzsonna', vacsora:'Vacsora' }
@@ -322,6 +323,7 @@ export default function TodayTab({ profile, user }) {
           )
         })}
       </div>
+      <WeeklySummary plan={plan} user={user} profile={profile} />
     </div>
   )
 }
