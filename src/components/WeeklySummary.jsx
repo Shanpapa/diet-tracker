@@ -3,12 +3,12 @@ import { supabase } from '../supabaseClient'
 
 const DAY_LABELS = ['H','K','Sze','Cs','P','Szo','V']
 const MEAL_KEYS = ['reggeli','tizorai','ebed','uzsonna','vacsora']
-const CHART_H = 120   // px - total chart area height
-const TARGET_H = 80   // px - where the target line sits
+const CANDLE_AREA_H = 110
+const TARGET_POS = 75  // px from bottom inside candleArea
 
 export default function WeeklySummary({ plan, user, profile }) {
-  const [checks, setChecks] = useState({})      // date -> {reggeli,tizorai,...}
-  const [overrides, setOverrides] = useState({}) // date_mealtype -> override
+  const [checks, setChecks] = useState({})
+  const [overrides, setOverrides] = useState({})
   const [loading, setLoading] = useState(true)
 
   const isLevi = profile.display_name === 'Levi'
@@ -16,13 +16,11 @@ export default function WeeklySummary({ plan, user, profile }) {
   const kcalTarget = profile.calorie_target
   const proteinTarget = isLevi ? 140 : 90
 
-  useEffect(() => {
-    if (plan && user) loadWeekData()
-  }, [plan, user])
+  useEffect(() => { if (plan && user) loadWeekData() }, [plan, user])
 
   function getWeekDates() {
     if (!plan?.week_start) return []
-    return Array.from({ length: 7 }, (_, i) => {
+    return Array.from({ length:7 }, (_,i) => {
       const d = new Date(plan.week_start)
       d.setDate(d.getDate() + i)
       return d.toISOString().split('T')[0]
@@ -32,20 +30,17 @@ export default function WeeklySummary({ plan, user, profile }) {
   async function loadWeekData() {
     setLoading(true)
     const dates = getWeekDates()
-    if (dates.length === 0) { setLoading(false); return }
-
-    const [checksRes, overridesRes] = await Promise.all([
+    if (!dates.length) { setLoading(false); return }
+    const [cr, or] = await Promise.all([
       supabase.from('meal_checks').select('*').eq('user_id', user.id).in('check_date', dates),
       supabase.from('daily_overrides').select('*').eq('user_id', user.id).in('override_date', dates),
     ])
-
-    const checksMap = {}
-    ;(checksRes.data || []).forEach(c => { checksMap[c.check_date] = c })
-    setChecks(checksMap)
-
-    const overridesMap = {}
-    ;(overridesRes.data || []).forEach(o => { overridesMap[o.override_date + '_' + o.meal_type] = o })
-    setOverrides(overridesMap)
+    const cm = {}
+    ;(cr.data||[]).forEach(c => { cm[c.check_date] = c })
+    setChecks(cm)
+    const om = {}
+    ;(or.data||[]).forEach(o => { om[o.override_date+'_'+o.meal_type] = o })
+    setOverrides(om)
     setLoading(false)
   }
 
@@ -57,23 +52,17 @@ export default function WeeklySummary({ plan, user, profile }) {
     const dayChecks = checks[date]
     const today = new Date().toISOString().split('T')[0]
     const isFuture = date > today
-    const isPast = date < today
     const isToday = date === today
+    const isPast = date < today
 
-    if (!dayChecks && isFuture) return { date, status:'future', kcal:0, protein:0, checkedCount:0, plannedKcal:0 }
-
-    let actualKcal = 0
-    let actualProtein = 0
-    let checkedCount = 0
-
+    let actualKcal = 0, actualProtein = 0, checkedCount = 0
     MEAL_KEYS.forEach(key => {
-      const isChecked = dayChecks?.[key]
-      if (!isChecked) return
+      if (!dayChecks?.[key]) return
       checkedCount++
-      const override = overrides[date + '_' + key]
-      if (override) {
-        actualKcal += override.total_kcal || 0
-        actualProtein += override.total_protein || 0
+      const ov = overrides[date+'_'+key]
+      if (ov) {
+        actualKcal += ov.total_kcal || 0
+        actualProtein += ov.total_protein || 0
       } else {
         const meal = dayPlan?.meals?.find(m => m.type === key)
         actualKcal += meal?.[myKey]?.total_kcal || 0
@@ -81,27 +70,27 @@ export default function WeeklySummary({ plan, user, profile }) {
       }
     })
 
-    const plannedKcal = dayPlan?.meals?.reduce((sum, m) => sum + (m[myKey]?.total_kcal || 0), 0) || 0
+    const plannedKcal = dayPlan?.meals?.reduce((s,m) => s + (m[myKey]?.total_kcal||0), 0) || 0
+    actualKcal = Math.round(actualKcal)
+    actualProtein = Math.round(actualProtein * 10) / 10
 
     return {
-      date, status: checkedCount === 0 && isPast ? 'missed' : checkedCount === 0 ? 'empty' : 'data',
-      kcal: Math.round(actualKcal),
-      protein: Math.round(actualProtein * 10) / 10,
-      checkedCount,
-      plannedKcal,
-      isToday,
-      proteinHit: actualProtein >= proteinTarget,
+      date, isToday, isFuture, isPast,
+      kcal: actualKcal, protein: actualProtein,
+      checkedCount, plannedKcal,
+      hasData: checkedCount > 0,
       onTarget: actualKcal > 0 && actualKcal <= kcalTarget,
       over: actualKcal > kcalTarget,
+      proteinHit: actualProtein >= proteinTarget,
     }
   }
 
   if (!plan) return null
-  if (loading) return <div style={{ color:'#606060', fontSize:12, textAlign:'center', padding:'16px 0' }}>heti adatok betöltése...</div>
+  if (loading) return <div style={{ color:'#606060', fontSize:12, textAlign:'center', padding:'20px 0' }}>heti adatok betöltése...</div>
 
-  const days = Array.from({ length: 7 }, (_, i) => getDayData(i))
+  const days = Array.from({length:7}, (_,i) => getDayData(i))
   const activeDays = days.filter(d => d?.kcal > 0)
-  const avgKcal = activeDays.length ? Math.round(activeDays.reduce((a,d) => a + d.kcal, 0) / activeDays.length) : 0
+  const avgKcal = activeDays.length ? Math.round(activeDays.reduce((a,d) => a+d.kcal, 0) / activeDays.length) : 0
   const onTargetDays = activeDays.filter(d => d.onTarget).length
   const streak = (() => {
     let s = 0
@@ -117,114 +106,114 @@ export default function WeeklySummary({ plan, user, profile }) {
 
   return (
     <div style={s.wrap}>
-      <div style={s.title}>Heti áttekintés</div>
+      <div style={s.header}>
+        <span style={s.title}>Heti áttekintés</span>
+        <span style={s.targetHint}>{kcalTarget} kcal cél</span>
+      </div>
 
-      {/* Candlestick chart */}
-      <div style={s.chartWrap}>
-        {/* Target line label */}
-        <div style={s.targetLabel}>{kcalTarget} kcal cél</div>
+      {/* Chart */}
+      <div style={s.chartRow}>
+        {days.map((day, i) => {
+          if (!day) return null
+          const ratio = day.kcal > 0 ? day.kcal / kcalTarget : 0
+          // candle height = ratio * TARGET_POS, capped at CANDLE_AREA_H
+          const bodyH = Math.min(Math.round(ratio * TARGET_POS), CANDLE_AREA_H)
+          // if over target, extra wick above target line
+          const wickH = day.over ? Math.min(Math.round((day.kcal - kcalTarget) / kcalTarget * TARGET_POS), CANDLE_AREA_H - TARGET_POS) : 0
+          const color = !day.hasData ? '#2a2a2a' : day.over ? '#ef4444' : '#22c55e'
+          const opacity = day.isFuture ? 0.3 : 1
 
-        <div style={s.chart}>
-          {/* Target line */}
-          <div style={{ ...s.targetLine, bottom: TARGET_H }} />
+          return (
+            <div key={i} style={{ ...s.dayCol, opacity }}>
+              {/* Candle area — target line is INSIDE here */}
+              <div style={s.candleArea}>
+                {/* TARGET LINE — same coordinate system as candle */}
+                <div style={{ ...s.targetLine, bottom: TARGET_POS }} />
 
-          {/* Day columns */}
-          {days.map((day, i) => {
-            if (!day) return null
-            const ratio = day.kcal > 0 ? day.kcal / kcalTarget : 0
-            const candleH = Math.min(ratio * TARGET_H, CHART_H)
-            const isOver = day.kcal > kcalTarget
-            const overH = isOver ? Math.min((day.kcal - kcalTarget) / kcalTarget * TARGET_H, CHART_H - TARGET_H) : 0
-            const hasData = day.kcal > 0
-            const candleColor = !hasData ? '#2a2a2a' : isOver ? '#ef4444' : '#22c55e'
-            const candleOpacity = day.status === 'future' ? 0.3 : 1
+                {/* Over-target wick */}
+                {day.over && wickH > 0 && (
+                  <div style={{
+                    position:'absolute',
+                    bottom: TARGET_POS,
+                    left:'50%', transform:'translateX(-50%)',
+                    width: 3, height: wickH,
+                    background:'#ef4444',
+                    borderRadius:'2px 2px 0 0',
+                  }} />
+                )}
 
-            return (
-              <div key={i} style={{ ...s.dayCol, opacity: candleOpacity }}>
-                {/* Candle area */}
-                <div style={s.candleArea}>
-                  {/* Over-target wick (red cap) */}
-                  {isOver && (
-                    <div style={{
-                      position:'absolute',
-                      bottom: TARGET_H,
-                      left:'50%', transform:'translateX(-50%)',
-                      width: 3,
-                      height: overH,
-                      background:'#ef4444',
-                      borderRadius: '2px 2px 0 0',
-                    }} />
-                  )}
-                  {/* Candle body */}
-                  {hasData && (
-                    <div style={{
-                      position:'absolute',
-                      bottom: 0,
-                      left:'50%', transform:'translateX(-50%)',
-                      width: 18,
-                      height: Math.min(candleH, TARGET_H),
-                      background: candleColor,
-                      borderRadius: '3px 3px 0 0',
-                      transition:'height 0.4s ease',
-                    }} />
-                  )}
-                  {/* Empty day ghost */}
-                  {!hasData && day.status !== 'future' && (
-                    <div style={{
-                      position:'absolute',
-                      bottom: 0,
-                      left:'50%', transform:'translateX(-50%)',
-                      width: 18, height: 24,
-                      border: '1px solid #2a2a2a',
-                      borderRadius: '3px 3px 0 0',
-                    }} />
-                  )}
-                  {/* Protein indicator - small dot above candle */}
-                  {hasData && (
-                    <div style={{
-                      position:'absolute',
-                      bottom: Math.min(candleH, TARGET_H) + 4,
-                      left:'50%', transform:'translateX(-50%)',
-                      width: 6, height: 6,
-                      borderRadius:'50%',
-                      background: day.proteinHit ? '#3b82f6' : '#3a3a3a',
-                    }} />
-                  )}
-                </div>
+                {/* Candle body */}
+                {day.hasData && bodyH > 0 && (
+                  <div style={{
+                    position:'absolute',
+                    bottom: 0,
+                    left:'50%', transform:'translateX(-50%)',
+                    width: 18,
+                    height: bodyH,
+                    background: color,
+                    borderRadius:'3px 3px 0 0',
+                    transition:'height 0.4s ease',
+                  }} />
+                )}
 
-                {/* Kcal number */}
-                <div style={{ fontSize:10, color: hasData ? (isOver ? '#ef4444' : '#606060') : '#3a3a3a', textAlign:'center', marginTop:4, minHeight:14 }}>
-                  {hasData ? day.kcal : ''}
-                </div>
+                {/* Empty placeholder */}
+                {!day.hasData && !day.isFuture && (
+                  <div style={{
+                    position:'absolute', bottom:0,
+                    left:'50%', transform:'translateX(-50%)',
+                    width:18, height:20,
+                    border:'1px solid #2a2a2a',
+                    borderRadius:'3px 3px 0 0',
+                  }} />
+                )}
 
-                {/* Meal dots */}
-                <div style={s.mealDots}>
-                  {MEAL_KEYS.map((_, mi) => (
-                    <div key={mi} style={{
-                      width: 5, height: 5, borderRadius:'50%',
-                      background: mi < day.checkedCount ? candleColor : '#2a2a2a',
-                    }} />
-                  ))}
-                </div>
-
-                {/* Day label */}
-                <div style={{ ...s.dayLabel, color: day.isToday ? '#22c55e' : '#606060', fontWeight: day.isToday ? 600 : 400 }}>
-                  {DAY_LABELS[i]}
-                </div>
+                {/* Protein dot — above candle */}
+                {day.hasData && (
+                  <div style={{
+                    position:'absolute',
+                    bottom: bodyH + 5,
+                    left:'50%', transform:'translateX(-50%)',
+                    width:6, height:6, borderRadius:'50%',
+                    background: day.proteinHit ? '#3b82f6' : '#333',
+                  }} />
+                )}
               </div>
-            )
-          })}
-        </div>
+
+              {/* Kcal label */}
+              <div style={{ fontSize:10, color: day.over ? '#ef4444' : '#606060', textAlign:'center', marginTop:3, minHeight:13 }}>
+                {day.kcal > 0 ? day.kcal : ''}
+              </div>
+
+              {/* Meal dots */}
+              <div style={s.dots}>
+                {MEAL_KEYS.map((_,mi) => (
+                  <div key={mi} style={{
+                    width:4, height:4, borderRadius:'50%',
+                    background: mi < day.checkedCount ? color : '#2a2a2a',
+                  }} />
+                ))}
+              </div>
+
+              {/* Day label */}
+              <div style={{ fontSize:11, textAlign:'center', color: day.isToday ? '#22c55e' : '#606060', fontWeight: day.isToday ? 600 : 400 }}>
+                {DAY_LABELS[i]}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {/* Legend */}
       <div style={s.legend}>
-        <div style={s.legendItem}><div style={{ ...s.legendDot, background:'#22c55e' }}/><span>Cél alatt</span></div>
-        <div style={s.legendItem}><div style={{ ...s.legendDot, background:'#ef4444' }}/><span>Túllépve</span></div>
-        <div style={s.legendItem}><div style={{ ...s.legendDot, background:'#3b82f6' }}/><span>Fehérje ✓</span></div>
+        {[['#22c55e','Cél alatt'],['#ef4444','Túllépve'],['#3b82f6','Fehérje ✓']].map(([c,l]) => (
+          <div key={l} style={s.legendItem}>
+            <div style={{ width:7, height:7, borderRadius:'50%', background:c }} />
+            <span>{l}</span>
+          </div>
+        ))}
       </div>
 
-      {/* Stats row */}
+      {/* Stats */}
       <div style={s.statsRow}>
         <div style={s.stat}>
           <div style={s.statVal}>{avgKcal || '—'}</div>
@@ -236,7 +225,7 @@ export default function WeeklySummary({ plan, user, profile }) {
         </div>
         <div style={s.stat}>
           <div style={{ ...s.statVal, color: streak >= 3 ? '#f59e0b' : '#e8e8e8' }}>
-            {streak} {streak >= 3 ? '🔥' : ''}
+            {streak}{streak >= 3 ? ' 🔥' : ''}
           </div>
           <div style={s.statLbl}>streak</div>
         </div>
@@ -247,18 +236,16 @@ export default function WeeklySummary({ plan, user, profile }) {
 
 const s = {
   wrap: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'16px 18px', marginTop:20 },
-  title: { fontSize:12, fontWeight:500, color:'#606060', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:14 },
-  chartWrap: { position:'relative', marginBottom:8 },
-  targetLabel: { fontSize:10, color:'#606060', marginBottom:4, textAlign:'right' },
-  chart: { position:'relative', display:'flex', justifyContent:'space-between', alignItems:'flex-end', height: CHART_H + 50 },
-  targetLine: { position:'absolute', left:0, right:0, height:1, background:'#f59e0b44', borderTop:'1px dashed #f59e0b66', zIndex:1 },
-  dayCol: { display:'flex', flexDirection:'column', alignItems:'center', width: 38 },
-  candleArea: { position:'relative', width:38, height: CHART_H },
-  mealDots: { display:'flex', gap:2, justifyContent:'center', marginBottom:4, marginTop:2 },
-  dayLabel: { fontSize:11, textAlign:'center' },
-  legend: { display:'flex', gap:12, justifyContent:'center', marginBottom:12, marginTop:4 },
-  legendItem: { display:'flex', alignItems:'center', gap:5, fontSize:11, color:'#606060' },
-  legendDot: { width:8, height:8, borderRadius:'50%' },
+  header: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
+  title: { fontSize:11, fontWeight:500, color:'#606060', textTransform:'uppercase', letterSpacing:'0.5px' },
+  targetHint: { fontSize:10, color:'#f59e0b99' },
+  chartRow: { display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:6 },
+  dayCol: { display:'flex', flexDirection:'column', alignItems:'center', width:36 },
+  candleArea: { position:'relative', width:36, height: CANDLE_AREA_H },
+  targetLine: { position:'absolute', left:0, right:0, height:1, borderTop:'1px dashed #f59e0b88', zIndex:2 },
+  dots: { display:'flex', gap:2, justifyContent:'center', marginTop:3, marginBottom:3 },
+  legend: { display:'flex', gap:14, justifyContent:'center', marginBottom:12, marginTop:4 },
+  legendItem: { display:'flex', alignItems:'center', gap:5, fontSize:10, color:'#606060' },
   statsRow: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, borderTop:'1px solid #2a2a2a', paddingTop:12 },
   stat: { textAlign:'center' },
   statVal: { fontSize:20, fontWeight:600, color:'#e8e8e8', lineHeight:1, marginBottom:4 },

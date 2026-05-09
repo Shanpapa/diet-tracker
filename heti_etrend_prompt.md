@@ -529,11 +529,19 @@ A generált étrendet az alábbi struktúrában add vissza, hogy az appba import
 \*\*Alapanyagok amiket fel kell használni (ha van):\*\*
 
 
+
 \*\*Amit mindenképpen kerüljük ezen a héten:\*\*
+
+
 
 \*\*Előző heti B-alap és maradék mennyisége\*\*
 
+
+
 \*\*Ezen heti új B-alap (vasárnap készül, köv. hétre megy)\*\*
+
+
+
 
 [pl. csirkecomb-pörkölt: ~800g maradt → 3 ebédre elég]
 [pl. sült zöldség mix: ~400g]
