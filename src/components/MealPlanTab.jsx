@@ -186,8 +186,9 @@ export default function MealPlanTab({ profile, user }) {
       .order('week_start', { ascending:false })
     setAllPlans(data || [])
     if (data && data.length > 0) {
-      await loadPlanById(data[0].id)
-      setSelectedPlanId(data[0].id)
+      const savedId = localStorage.getItem('dt_selected_plan')
+      const preferred = data.find(p => p.id === savedId) || data[0]
+      await loadPlanById(preferred.id)
     } else {
       setLoading(false)
     }
@@ -202,6 +203,7 @@ export default function MealPlanTab({ profile, user }) {
     const { data } = await supabase.from('meal_plans').select('*').eq('id', id).single()
     setPlan(data?.plan_data || null)
     setSelectedPlanId(id)
+    localStorage.setItem('dt_selected_plan', id)
     setLoading(false)
   }
 
