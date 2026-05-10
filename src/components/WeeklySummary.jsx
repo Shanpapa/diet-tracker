@@ -235,14 +235,14 @@ export default function WeeklySummary({ plan, user, profile }) {
 }
 
 const s = {
-  wrap: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'16px 18px', marginTop:20 },
+  wrap: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'16px 18px', marginTop:20, overflow:'hidden' },
   header: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
   title: { fontSize:11, fontWeight:500, color:'#606060', textTransform:'uppercase', letterSpacing:'0.5px' },
   targetHint: { fontSize:10, color:'#f59e0b99' },
-  chartRow: { display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:6 },
+  chartRow: { display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:6, overflow:'hidden' },
   dayCol: { display:'flex', flexDirection:'column', alignItems:'center', width:36 },
   candleArea: { position:'relative', width:36, height: CANDLE_AREA_H, overflow:'hidden' },
-  targetLine: { position:'absolute', left:0, right:0, height:1, borderTop:'1px dashed #f59e0b88', zIndex:2 },
+  targetLine: { position:'absolute', left:0, right:0, height:1, borderTop:'1px dashed #f59e0b88' },
   dots: { display:'flex', gap:2, justifyContent:'center', marginTop:3, marginBottom:3 },
   legend: { display:'flex', gap:14, justifyContent:'center', marginBottom:12, marginTop:4 },
   legendItem: { display:'flex', alignItems:'center', gap:5, fontSize:10, color:'#606060' },
