@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import FoodSearch from './FoodSearch'
+import RecipePicker from './RecipePicker'
 
 const MEAL_LABELS = { reggeli:'Reggeli', tizorai:'Tízórai', ebed:'Ebéd', uzsonna:'Uzsonna', vacsora:'Vacsora' }
 const MEAL_ORDER = ['reggeli','tizorai','ebed','uzsonna','vacsora']
@@ -56,23 +57,10 @@ function PatchNotes({ notes }) {
 
 function InlineEditor({ mealType, mealName, currentItems, onSave, onCancel }) {
   const [items, setItems] = useState(currentItems || [])
-  const [recipes, setRecipes] = useState([])
   const [showRecipes, setShowRecipes] = useState(false)
-
-  useEffect(() => {
-    supabase.from('recipes').select('*').order('name').then(({ data }) => setRecipes(data || []))
-  }, [])
 
   function addItem(item) { setItems(prev => [...prev, item]) }
   function removeItem(idx) { setItems(prev => prev.filter((_,i) => i !== idx)) }
-  function addRecipe(recipe) {
-    setItems(prev => [...prev, {
-      name: recipe.name, amount:'1 adag',
-      kcal: recipe.total_kcal, protein: recipe.total_protein,
-      carbs: recipe.total_carbs||0, fat: recipe.total_fat||0, fiber: recipe.total_fiber||0,
-    }])
-    setShowRecipes(false)
-  }
   const total = items.reduce((a,i) => a + (i.kcal||0), 0)
   const totalP = Math.round(items.reduce((a,i) => a + (i.protein||0), 0) * 10) / 10
   return (
@@ -102,21 +90,7 @@ function InlineEditor({ mealType, mealName, currentItems, onSave, onCancel }) {
         </div>
       )}
       {showRecipes ? (
-        <div style={s.searchBox}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-            <span style={{ fontSize:12, color:'#a0a0a0', fontWeight:500 }}>Receptjeim</span>
-            <button onClick={() => setShowRecipes(false)} style={{ background:'none', border:'1px solid #2a2a2a', borderRadius:6, color:'#606060', padding:'4px 10px', fontSize:11, cursor:'pointer' }}>✕ Bezár</button>
-          </div>
-          {recipes.length === 0
-            ? <div style={{ fontSize:13, color:'#606060', textAlign:'center', padding:'12px 0' }}>Még nincs mentett recept.</div>
-            : recipes.map(r => (
-              <div key={r.id} onClick={() => addRecipe(r)} style={{ padding:'10px 0', borderBottom:'1px solid #2a2a2a', cursor:'pointer' }}>
-                <div style={{ fontSize:14, color:'#e8e8e8', marginBottom:3 }}>{r.name}</div>
-                <div style={{ fontSize:12, color:'#606060' }}>{r.total_kcal} kcal · {r.total_protein}g P · {r.servings} adag</div>
-              </div>
-            ))
-          }
-        </div>
+        <RecipePicker onAdd={addItem} onClose={() => setShowRecipes(false)} />
       ) : (
         <div style={s.searchBox}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
@@ -183,6 +157,8 @@ function MealCard({ meal, myKey, partnerKey, partnerName, override, onEdit }) {
 }
 
 export default function MealPlanTab({ profile, user }) {
+  const [allPlans, setAllPlans] = useState([])
+  const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [plan, setPlan] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showImport, setShowImport] = useState(false)
@@ -201,16 +177,31 @@ export default function MealPlanTab({ profile, user }) {
   const partnerName = isLevi ? 'Edit' : 'Levi'
 
   useEffect(() => {
-    loadPlan()
+    loadAllPlans()
     if (user) loadOverrides()
   }, [])
 
-  async function loadPlan() {
-    const { data } = await supabase.from('meal_plans').select('*')
+  async function loadAllPlans() {
+    const { data } = await supabase.from('meal_plans').select('id,week_start,created_at')
       .order('week_start', { ascending:false })
-      .order('created_at', { ascending:false })
-      .limit(1).maybeSingle()
+    setAllPlans(data || [])
+    if (data && data.length > 0) {
+      await loadPlanById(data[0].id)
+      setSelectedPlanId(data[0].id)
+    } else {
+      setLoading(false)
+    }
+  }
+
+  async function loadPlan() {
+    await loadAllPlans()
+  }
+
+  async function loadPlanById(id) {
+    setLoading(true)
+    const { data } = await supabase.from('meal_plans').select('*').eq('id', id).single()
     setPlan(data?.plan_data || null)
+    setSelectedPlanId(id)
     setLoading(false)
   }
 
@@ -320,10 +311,26 @@ export default function MealPlanTab({ profile, user }) {
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:allPlans.length > 1 ? 8 : 12 }}>
         <span style={{ fontSize:12, color:'#606060' }}>Hét: {plan.week_start}</span>
         <button onClick={() => setShowImport(true)} style={s.swapBtn}>↺ Új terv</button>
       </div>
+
+      {allPlans.length > 1 && (
+        <div style={{ display:'flex', gap:6, overflowX:'auto', marginBottom:12, paddingBottom:2 }}>
+          {allPlans.map(p => (
+            <button key={p.id} onClick={() => loadPlanById(p.id)}
+              style={{
+                flexShrink:0, padding:'5px 12px', borderRadius:20, fontSize:11, fontWeight:500, cursor:'pointer',
+                background: p.id === selectedPlanId ? '#052e16' : '#1e1e1e',
+                border: `1px solid ${p.id === selectedPlanId ? '#22c55e' : '#2a2a2a'}`,
+                color: p.id === selectedPlanId ? '#22c55e' : '#606060',
+              }}>
+              {p.week_start}
+            </button>
+          ))}
+        </div>
+      )}
 
       <PatchNotes notes={plan.patch_notes} />
 

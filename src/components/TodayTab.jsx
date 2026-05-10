@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import FoodSearch from './FoodSearch'
 import WeeklySummary from './WeeklySummary'
+import RecipePicker from './RecipePicker'
 
 const MEAL_ORDER = ['reggeli','tizorai','ebed','uzsonna','vacsora']
 const MEAL_LABELS = { reggeli:'Reggeli', tizorai:'Tízórai', ebed:'Ebéd', uzsonna:'Uzsonna', vacsora:'Vacsora' }
@@ -89,21 +90,7 @@ function MealEditor({ mealType, currentItems, mealName, onSave, onCancel, dayBud
       )}
 
       {showRecipes ? (
-        <div style={s.recipesPanel}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-            <span style={s.panelTitle}>Receptjeim</span>
-            <button onClick={() => setShowRecipes(false)} style={s.smallBtn}>✕ Bezár</button>
-          </div>
-          {recipes.length === 0
-            ? <div style={s.emptyMsg}>Még nincs mentett recept.</div>
-            : recipes.map(r => (
-              <div key={r.id} style={s.recipeItem} onClick={() => addRecipe(r)}>
-                <span style={s.recipeName}>{r.name}</span>
-                <span style={s.recipeMeta}>{r.total_kcal} kcal · {r.total_protein}g P · {r.servings} adag</span>
-              </div>
-            ))
-          }
-        </div>
+        <RecipePicker onAdd={addItem} onClose={() => setShowRecipes(false)} />
       ) : (
         <div style={s.addSection}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>

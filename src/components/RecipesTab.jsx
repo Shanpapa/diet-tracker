@@ -9,14 +9,18 @@ function RecipeCard({ recipe, onDelete }) {
       <div style={s.cardHeader} onClick={() => setOpen(!open)}>
         <div>
           <div style={s.recipeName}>{recipe.name}</div>
-          <div style={s.recipeMeta}>{recipe.servings} adag · {recipe.total_kcal} kcal/adag · {recipe.total_protein}g fehérje</div>
+          <div style={s.recipeMeta}>
+            {recipe.total_kcal} kcal
+            {recipe.total_weight_g ? ` · ${recipe.total_weight_g}g összesen` : ` · ${recipe.servings} adag`}
+            {' · '}{recipe.total_protein}g fehérje
+          </div>
         </div>
         <span style={{ fontSize:10, color:'#606060' }}>{open ? '▲' : '▼'}</span>
       </div>
       {open && (
         <div style={s.cardBody}>
           {recipe.description && <div style={s.desc}>{recipe.description}</div>}
-          <div style={s.ingTitle}>Alapanyagok (1 adag)</div>
+          <div style={s.ingTitle}>Alapanyagok</div>
           {(recipe.ingredients || []).map((ing, i) => (
             <div key={i} style={s.ingRow}>
               <span style={s.ingName}>{ing.name}</span>
@@ -26,13 +30,13 @@ function RecipeCard({ recipe, onDelete }) {
           ))}
           <div style={s.macroRow}>
             <span style={s.macro}>{recipe.total_kcal} kcal</span>
-            <span style={s.macroDot}>·</span>
+            <span style={s.dot}>·</span>
             <span style={s.macro}>{recipe.total_protein}g P</span>
-            <span style={s.macroDot}>·</span>
+            <span style={s.dot}>·</span>
             <span style={s.macro}>{recipe.total_carbs}g C</span>
-            <span style={s.macroDot}>·</span>
+            <span style={s.dot}>·</span>
             <span style={s.macro}>{recipe.total_fat}g F</span>
-            <span style={s.macroDot}>·</span>
+            <span style={s.dot}>·</span>
             <span style={s.macro}>{recipe.total_fiber}g rost</span>
           </div>
           <button onClick={() => onDelete(recipe.id)} style={s.deleteBtn}>Törlés</button>
@@ -45,27 +49,20 @@ function RecipeCard({ recipe, onDelete }) {
 function CreateRecipe({ onSave, onCancel }) {
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
-  const [servings, setServings] = useState(1)
+  const [totalWeightG, setTotalWeightG] = useState('')
   const [ingredients, setIngredients] = useState([])
   const [saving, setSaving] = useState(false)
 
-  function addIngredient(item) {
-    setIngredients(prev => [...prev, item])
-  }
-
-  function removeIngredient(idx) {
-    setIngredients(prev => prev.filter((_, i) => i !== idx))
-  }
+  function addIngredient(item) { setIngredients(prev => [...prev, item]) }
+  function removeIngredient(idx) { setIngredients(prev => prev.filter((_,i) => i !== idx)) }
 
   function getTotals() {
-    if (ingredients.length === 0) return { kcal:0, protein:0, carbs:0, fat:0, fiber:0 }
-    const s = servings || 1
     return {
-      kcal: Math.round(ingredients.reduce((a,i) => a + i.kcal, 0) / s),
-      protein: Math.round(ingredients.reduce((a,i) => a + i.protein, 0) / s * 10) / 10,
-      carbs: Math.round(ingredients.reduce((a,i) => a + i.carbs, 0) / s * 10) / 10,
-      fat: Math.round(ingredients.reduce((a,i) => a + i.fat, 0) / s * 10) / 10,
-      fiber: Math.round(ingredients.reduce((a,i) => a + i.fiber, 0) / s * 10) / 10,
+      kcal: Math.round(ingredients.reduce((a,i) => a + i.kcal, 0)),
+      protein: Math.round(ingredients.reduce((a,i) => a + (i.protein||0), 0) * 10) / 10,
+      carbs: Math.round(ingredients.reduce((a,i) => a + (i.carbs||0), 0) * 10) / 10,
+      fat: Math.round(ingredients.reduce((a,i) => a + (i.fat||0), 0) * 10) / 10,
+      fiber: Math.round(ingredients.reduce((a,i) => a + (i.fiber||0), 0) * 10) / 10,
     }
   }
 
@@ -76,7 +73,8 @@ function CreateRecipe({ onSave, onCancel }) {
     const { data, error } = await supabase.from('recipes').insert({
       name: name.trim(),
       description: desc.trim(),
-      servings: Number(servings) || 1,
+      servings: 1,
+      total_weight_g: totalWeightG ? parseFloat(totalWeightG) : null,
       ingredients,
       total_kcal: t.kcal,
       total_protein: t.protein,
@@ -99,7 +97,7 @@ function CreateRecipe({ onSave, onCancel }) {
 
       <div style={s.field}>
         <label style={s.label}>Recept neve</label>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="pl. Lazacos tészta" style={s.textInput} />
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="pl. Csirkés zöldségleves" style={s.textInput} />
       </div>
 
       <div style={s.field}>
@@ -108,8 +106,17 @@ function CreateRecipe({ onSave, onCancel }) {
       </div>
 
       <div style={s.field}>
-        <label style={s.label}>Adagok száma</label>
-        <input type="number" value={servings} onChange={e => setServings(e.target.value)} min={1} style={{ ...s.textInput, width:80 }} />
+        <label style={s.label}>Elkészített étel teljes súlya (g)</label>
+        <div style={{ fontSize:12, color:'#606060', marginBottom:6 }}>
+          Pl. ha 2 liter levest főzöl, írd be: 2000. Így grammra pontosan adhatsz hozzá a napi étrendedhez.
+        </div>
+        <input
+          type="number"
+          value={totalWeightG}
+          onChange={e => setTotalWeightG(e.target.value)}
+          placeholder="pl. 2000"
+          style={{ ...s.textInput, width:140 }}
+        />
       </div>
 
       <div style={s.sectionTitle}>Alapanyagok</div>
@@ -119,16 +126,18 @@ function CreateRecipe({ onSave, onCancel }) {
         <div style={s.ingList}>
           {ingredients.map((ing, i) => (
             <div key={i} style={s.ingItem}>
-              <span style={s.ingName}>{ing.name}</span>
+              <span style={{ flex:1, fontSize:13, color:'#e8e8e8' }}>{ing.name}</span>
               <span style={s.ingAmt}>{ing.amount}</span>
               <span style={s.ingKcal}>{ing.kcal} kcal</span>
               <button onClick={() => removeIngredient(i)} style={s.removeBtn}>✕</button>
             </div>
           ))}
           <div style={s.totalRow}>
-            <span style={{ color:'#606060', fontSize:12 }}>1 adag összesen:</span>
-            <span style={s.totalKcal}>{totals.kcal} kcal</span>
-            <span style={{ fontSize:12, color:'#606060' }}>{totals.protein}g P · {totals.fiber}g rost</span>
+            <span style={{ color:'#606060', fontSize:12 }}>
+              Összesen: {totals.kcal} kcal
+              {totalWeightG ? ` · ${Math.round(totals.kcal / parseFloat(totalWeightG) * 100)} kcal/100g` : ''}
+            </span>
+            <span style={s.totalKcal}>{totals.protein}g fehérje</span>
           </div>
         </div>
       )}
@@ -143,7 +152,7 @@ function CreateRecipe({ onSave, onCancel }) {
 export default function RecipesTab() {
   const [recipes, setRecipes] = useState([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState('list') // list | create | search
+  const [view, setView] = useState('list')
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => { loadRecipes() }, [])
@@ -174,28 +183,20 @@ export default function RecipesTab() {
         <button onClick={() => setView('create')} style={s.newBtn}>+ Új recept</button>
       </div>
 
-      {view === 'list' && (
-        <>
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Recept keresése..."
-            style={s.searchInput}
-          />
+      <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+        placeholder="Recept keresése..." style={s.searchInput} />
 
-          <div style={s.sectionTitle}>Alapanyag kereső</div>
-          <div style={s.searchCard}>
-            <FoodSearch onAdd={() => {}} />
-          </div>
+      <div style={s.sectionTitle}>Alapanyag kereső</div>
+      <div style={s.searchCard}>
+        <FoodSearch onAdd={() => {}} />
+      </div>
 
-          <div style={s.sectionTitle}>Receptjeim ({recipes.length})</div>
-          {loading && <div style={s.empty}>betöltés...</div>}
-          {!loading && filtered.length === 0 && (
-            <div style={s.empty}>Még nincs mentett recept. Hozz létre egyet!</div>
-          )}
-          {filtered.map(r => <RecipeCard key={r.id} recipe={r} onDelete={deleteRecipe} />)}
-        </>
+      <div style={s.sectionTitle}>Receptjeim ({recipes.length})</div>
+      {loading && <div style={s.empty}>betöltés...</div>}
+      {!loading && filtered.length === 0 && (
+        <div style={s.empty}>Még nincs mentett recept.</div>
       )}
+      {filtered.map(r => <RecipeCard key={r.id} recipe={r} onDelete={deleteRecipe} />)}
     </div>
   )
 }
@@ -203,7 +204,7 @@ export default function RecipesTab() {
 const s = {
   tabHeader: { display:'flex', justifyContent:'flex-end', marginBottom:16 },
   newBtn: { background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:'10px 16px', fontSize:13, fontWeight:600, cursor:'pointer' },
-  searchInput: { width:'100%', background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, padding:'10px 14px', color:'#e8e8e8', fontSize:14, outline:'none', marginBottom:16 },
+  searchInput: { width:'100%', background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, padding:'10px 14px', color:'#e8e8e8', fontSize:14, outline:'none', marginBottom:16, boxSizing:'border-box' },
   sectionTitle: { fontSize:11, fontWeight:500, color:'#606060', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10, marginTop:4 },
   searchCard: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, padding:'14px 16px', marginBottom:20 },
   card: { background:'#161616', border:'1px solid #2a2a2a', borderRadius:12, overflow:'hidden', marginBottom:10 },
@@ -219,7 +220,7 @@ const s = {
   ingKcal: { fontSize:12, color:'#606060', minWidth:55, textAlign:'right' },
   macroRow: { display:'flex', gap:8, alignItems:'center', marginTop:10, flexWrap:'wrap' },
   macro: { fontSize:12, color:'#a0a0a0' },
-  macroDot: { color:'#2a2a2a', fontSize:10 },
+  dot: { color:'#2a2a2a', fontSize:10 },
   deleteBtn: { marginTop:12, background:'none', border:'1px solid #3a0000', borderRadius:8, color:'#ef4444', padding:'6px 14px', fontSize:12, cursor:'pointer' },
   empty: { color:'#606060', fontSize:13, textAlign:'center', padding:'24px 0' },
   createWrap: { display:'flex', flexDirection:'column', gap:12 },
@@ -230,10 +231,8 @@ const s = {
   textarea: { background:'#1e1e1e', border:'1px solid #2a2a2a', borderRadius:8, padding:'10px 12px', color:'#e8e8e8', fontSize:13, outline:'none', resize:'vertical', lineHeight:1.5 },
   ingList: { background:'#1a1a1a', borderRadius:8, overflow:'hidden', border:'1px solid #2a2a2a' },
   ingItem: { display:'flex', gap:8, padding:'10px 14px', borderBottom:'1px solid #222', alignItems:'center' },
-  ingAmt: { fontSize:12, color:'#a0a0a0', minWidth:60, textAlign:'right' },
-  ingKcal: { fontSize:12, color:'#606060', minWidth:55, textAlign:'right' },
   removeBtn: { background:'none', border:'none', color:'#606060', fontSize:12, cursor:'pointer', marginLeft:4 },
-  totalRow: { display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'#111' },
-  totalKcal: { fontSize:15, fontWeight:600, color:'#22c55e' },
+  totalRow: { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', background:'#111' },
+  totalKcal: { fontSize:13, fontWeight:500, color:'#22c55e' },
   saveBtn: { background:'#22c55e', color:'#0d1a0d', border:'none', borderRadius:8, padding:14, fontSize:15, fontWeight:600, cursor:'pointer', marginTop:8 },
 }
