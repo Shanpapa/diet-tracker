@@ -241,7 +241,7 @@ const s = {
   targetHint: { fontSize:10, color:'#f59e0b99' },
   chartRow: { display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:6 },
   dayCol: { display:'flex', flexDirection:'column', alignItems:'center', width:36 },
-  candleArea: { position:'relative', width:36, height: CANDLE_AREA_H },
+  candleArea: { position:'relative', width:36, height: CANDLE_AREA_H, overflow:'hidden' },
   targetLine: { position:'absolute', left:0, right:0, height:1, borderTop:'1px dashed #f59e0b88', zIndex:2 },
   dots: { display:'flex', gap:2, justifyContent:'center', marginTop:3, marginBottom:3 },
   legend: { display:'flex', gap:14, justifyContent:'center', marginBottom:12, marginTop:4 },
